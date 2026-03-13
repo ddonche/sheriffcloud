@@ -1,8 +1,19 @@
+# Build output
 dist/
 
-# Ignore ALL portals
-site/portals/*
+# Portal content (client sites)
+site/portals/
 
-# Re-include sheriff portal
-!site/portals/sheriff/
-!site/portals/sheriff/**
+# Environment / secrets
+.env
+.env.*
+
+# Node (if any tools appear later)
+node_modules/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
