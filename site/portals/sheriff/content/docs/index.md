@@ -7,7 +7,7 @@ meta_type: docs
 summary: Sheriff docs are a mix of documentation and wiki.
 ^^^^
 
-Here we begin the Sheriff documentation. Look at these image links:
+Here we begin the Sheriff documentation. Look at these image links, aren't they neat?
 
 [[image:test.png|full|center|A beautiful sunset]]
 
