@@ -1,13 +1,141 @@
 /// modules/markdown_core/markdown.gbln
 /// Render Markdown in ctx["body"] → HTML, store back in ctx["body"].
+///
+/// IMPORTANT:
+/// We protect syntaxes that contain `|` before markdown parsing,
+/// because markdown tables will otherwise split on those pipes.
+///
+/// Protected before md parse:
+/// - fenced code blocks: ```...```
+/// - inline code spans: `...`
+/// - wikilinks: [[...]]   (including alias links like [[page|label]])
+///
+/// Restore order after md parse:
+/// - wikilinks (raw, so Trailboss can process them later)
+/// - inline code (as final HTML <code>...</code>)
+/// - fenced code blocks (as full HTML blocks)
+
 act render(ctx)
     body | ctx["body"]
     if body.nix? => return ctx
     
     clean | :sanitize_bom(body)
     normalized | :normalize_newlines(clean)
-    out | :md_to_html(normalized)
+
+    protected | "" + normalized
+
+    /// --------------------------------------------------------------
+    /// 1) STASH FENCED CODE BLOCKS FIRST
+    /// --------------------------------------------------------------
+    fence_stash | []
+    fn | 0
+
+    seg | ""
+    key | ""
+
+    sweep protected
+        "```" ... "```":
+            seg |= "" + self
+            key |= "@@TB_FENCE_{fn}@@"
+            :put_last!(fence_stash, {"k": key, "v": seg})
+            :update_where!(protected, seg, key)
+            fn += 1
+    xx
+
+    /// --------------------------------------------------------------
+    /// 2) STASH INLINE CODE
+    /// --------------------------------------------------------------
+    code_stash | []
+    cn | 0
+
+    seg |= ""
+    key |= ""
+    inner | ""
+    html | ""
+
+    sweep protected
+        "`" ... "`":
+            seg |= "" + self
+            key |= "@@TB_CODE_{cn}@@"
+
+            inner |= :keep_between(seg, "`", "`") ?? ""
+            html |= "<code>" + escape_text(inner) + "</code>"
+
+            :put_last!(code_stash, {"k": key, "v": html})
+            :update_where!(protected, seg, key)
+            cn += 1
+    xx
+
+    /// --------------------------------------------------------------
+    /// 3) STASH WIKILINKS
+    /// --------------------------------------------------------------
+    wikistash | []
+    wn | 0
+
+    seg |= ""
+    key |= ""
+
+    sweep protected
+        "[[" ... "]]":
+            seg |= "" + self
+            key |= "@@TB_WIKILINK_{wn}@@"
+            :put_last!(wikistash, {"k": key, "v": seg})
+            :update_where!(protected, seg, key)
+            wn += 1
+    xx
+
+    /// --------------------------------------------------------------
+    /// 4) MARKDOWN RENDER
+    /// --------------------------------------------------------------
+    out | :md_to_html(protected)
+
+    /// --------------------------------------------------------------
+    /// 5) RESTORE WIKILINKS
+    /// --------------------------------------------------------------
+    for item in wikistash
+        if item.nix? => skip
+        k | item["k"]
+        v | item["v"]
+        if k.nix? => skip
+        if v.nix? => skip
+        :update_where!(out, "" + k, "" + v)
+    xx
+
+    /// --------------------------------------------------------------
+    /// 6) RESTORE INLINE CODE
+    /// --------------------------------------------------------------
+    for item in code_stash
+        if item.nix? => skip
+        k | item["k"]
+        v | item["v"]
+        if k.nix? => skip
+        if v.nix? => skip
+        :update_where!(out, "" + k, "" + v)
+    xx
+
+    /// --------------------------------------------------------------
+    /// 7) RESTORE FENCED CODE BLOCKS
+    /// --------------------------------------------------------------
+    for item in fence_stash
+        if item.nix? => skip
+        k | item["k"]
+        v | item["v"]
+        if k.nix? => skip
+        if v.nix? => skip
+
+        fence_html | :md_to_html("" + v)
+        :update_where!(out, "" + k, "" + fence_html)
+    xx
     
     :update!(ctx["body"], out)
     return ctx
+xx
+
+act escape_text(s)
+    if s.nix? => return ""
+    out | "" + s
+    :update_where!(out, "&", "&amp;")
+    :update_where!(out, "<", "&lt;")
+    :update_where!(out, ">", "&gt;")
+    return out
 xx

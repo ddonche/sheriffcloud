@@ -58,10 +58,7 @@ act build_repo_badge(repo, ver)
         return ""
     xx
 
-    url   | ""
-    name  | ""
-    stars | ""
-    forks | ""
+    url, name, stars, forks | ""
 
     if !repo["url"].nix?
         :update!(url, "" + repo["url"])

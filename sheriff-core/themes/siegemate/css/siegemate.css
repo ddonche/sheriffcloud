@@ -441,6 +441,50 @@ button a::after {
 }
 
 /* ========================================================================== */
+/* SHARD (::: shard) – contextual insert, not an admonition                   */
+/* ========================================================================== */
+
+.sheriff-shard {
+  margin: 1.15rem 0 1.5rem 0;
+  padding: 0.85rem 1rem 0.9rem 1rem;
+
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+
+  position: relative;
+}
+
+.sheriff-shard-body {
+  font-family: 'EB Garamond', Georgia, serif;
+  font-size: 1.05rem;
+  line-height: 1.65;
+  color: #b0aa9e;
+}
+
+.sheriff-shard-body p {
+  margin: 0 0 0.55rem 0;
+}
+
+.sheriff-shard-body p:last-child {
+  margin-bottom: 0;
+}
+
+.sheriff-shard-body strong {
+  color: #c4bfb0;
+  font-weight: 600;
+}
+
+.sheriff-shard-body a {
+  color: #b8966a;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.sheriff-shard-body a:hover {
+  color: #5de8f7;
+}
+
+/* ========================================================================== */
 /* ARTICLE NAV BLOCKS (::: nav) — VEKKE THEME                                 */
 /* ========================================================================== */
 

@@ -137,8 +137,7 @@ act build_page_meta(fm)
     if fm.nix? => return ""
     if :valtype(fm) != "map" => return ""
 
-    kind | ""
-    type | ""
+    kind, type | ""
 
     /// meta_kind
     if !fm["meta_kind"].nix?
@@ -237,10 +236,7 @@ act apply_tokens(ctx)
     /// --------------------------------------------------
     assets_path | "../site/portals/{portal}/assets.yall"
 
-    assets_head_raw | ""
-    assets_end_raw  | ""
-    assets_top_tag  | ""
-    assets_top_html | ""
+    assets_head_raw, assets_end_raw, assets_top_tag, assets_top_html | ""
 
     if :file_exists(assets_path)
         assets_cfg | :yall_parse_file(assets_path)
@@ -306,8 +302,7 @@ act apply_tokens(ctx)
         xx
     xx
 
-    assets_head_html | ""
-    assets_end_html  | ""
+    assets_head_html, assets_end_html | ""
 
     if assets_head_raw != ""
         :update!(assets_head_html, """<script src="{assets_head_raw}"></script>""")
