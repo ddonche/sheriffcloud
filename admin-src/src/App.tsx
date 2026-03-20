@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react"
 import { getSupabase } from "./supabase"
+import CodeMirror, { EditorView } from "@uiw/react-codemirror"
+import { markdown } from "@codemirror/lang-markdown"
+import { languages } from "@codemirror/language-data"
+import { githubLight } from "@uiw/codemirror-theme-github"
 
 type PortalResponse = {
   portals: string[]
@@ -353,7 +357,7 @@ function FileTree({
             style={{
               ...styles.fileRow,
               paddingLeft: 16 + depth * 18,
-              background: isSelected ? "#111827" : "#fff",
+              background: isSelected ? "#3296ab" : "#fff",
               color: isSelected ? "#fff" : "#111827",
             }}
           >
@@ -871,7 +875,7 @@ export default function App() {
           <div style={styles.headerLeft}>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <SheriffLogo size={40} />
-              <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: "0.08em" }}>
+              <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: "0.14em" }}>
                 SHERIFF CLOUD
               </span>
             </div>
@@ -1183,12 +1187,31 @@ export default function App() {
                   <button style={styles.toolbarButton}>Link</button>
                 </div>
 
-                <textarea
+                <CodeMirror
                   value={fileContent}
-                  onChange={(e) => setFileContent(e.target.value)}
-                  spellCheck={false}
-                  style={styles.editorTextarea}
+                  onChange={(val) => setFileContent(val)}
+                  extensions={[
+                    markdown({ codeLanguages: languages }),
+                    githubLight,
+                    EditorView.lineWrapping,
+                  ]}
+                  basicSetup={{
+                    lineNumbers: true,
+                    highlightActiveLine: true,
+                    highlightActiveLineGutter: true,
+                    foldGutter: false,
+                    dropCursor: false,
+                    allowMultipleSelections: false,
+                    indentOnInput: true,
+                    syntaxHighlighting: true,
+                    bracketMatching: false,
+                    closeBrackets: false,
+                    autocompletion: false,
+                    crosshairCursor: false,
+                    highlightSelectionMatches: false,
+                  }}
                   placeholder="Select a file to start editing"
+                  editable={!!selectedFile && !loadingFileContent}
                 />
               </section>
             </div>
@@ -1238,9 +1261,9 @@ export default function App() {
 const styles: Record<string, CSSProperties> = {
   appShell: {
     minHeight: "100vh",
-    background: "#f4f4f5",
+    background: "#fafafa",
     color: "#18181b",
-    fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
+    fontFamily: `system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`,
   },
   header: {
     borderBottom: "1px solid #d4d4d8",
@@ -1274,7 +1297,7 @@ const styles: Record<string, CSSProperties> = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    background: "#18181b",
+    background: "#3296ab",
     color: "#fff",
     fontSize: 14,
     fontWeight: 700,
@@ -1306,18 +1329,21 @@ const styles: Record<string, CSSProperties> = {
     border: 0,
     background: "transparent",
     fontSize: 14,
-    color: "#111827",
+    color: "#3296ab",
     fontWeight: 700,
     cursor: "pointer",
     padding: 0,
   },
   upgradeButton: {
-    border: 0,
+    border: "1px solid #3296ab",
     background: "transparent",
-    color: "#059669",
+    color: "#3296ab",
     fontWeight: 700,
-    fontSize: 14,
+    fontSize: 13,
     cursor: "pointer",
+    borderRadius: 999,
+    padding: "6px 14px",
+    letterSpacing: "0.04em",
   },
   headerInput: {
     border: "1px solid #d4d4d8",
@@ -1325,6 +1351,7 @@ const styles: Record<string, CSSProperties> = {
     padding: "10px 12px",
     fontSize: 14,
     minWidth: 140,
+    borderRadius: 4,
   },
   newSiteRow: {
     display: "flex",
@@ -1340,7 +1367,7 @@ const styles: Record<string, CSSProperties> = {
   },
   sidebar: {
     borderRight: "1px solid #d4d4d8",
-    background: "#fafafa",
+    background: "#f1f3f5",
     transition: "width 160ms ease",
     overflow: "hidden",
     flexShrink: 0,
@@ -1381,11 +1408,11 @@ const styles: Record<string, CSSProperties> = {
     color: "#111827",
   },
   sidebarItemActive: {
-    background: "#111827",
+    background: "#3296ab",
     color: "#fff",
   },
   sidebarNavActive: {
-    borderLeft: "4px solid #111827",
+    borderLeft: "4px solid #3296ab",
     background: "#fff",
     fontWeight: 700,
   },
@@ -1435,6 +1462,8 @@ const styles: Record<string, CSSProperties> = {
   logPanel: {
     border: "1px solid #d4d4d8",
     background: "#fff",
+    borderRadius: 4,
+    overflow: "hidden",
   },
   logStatusOnly: {
     padding: "10px 12px",
@@ -1464,6 +1493,7 @@ const styles: Record<string, CSSProperties> = {
     flexWrap: "wrap",
     padding: "16px 24px",
     borderBottom: "1px solid #d4d4d8",
+    background: "#f1f3f5",
   },
   siteName: {
     fontSize: 14,
@@ -1581,6 +1611,7 @@ const styles: Record<string, CSSProperties> = {
     padding: "6px 10px",
     fontSize: 13,
     cursor: "pointer",
+    borderRadius: 4,
   },
   editorTextarea: {
     width: "100%",
@@ -1620,6 +1651,7 @@ const styles: Record<string, CSSProperties> = {
     border: "1px solid #d4d4d8",
     padding: 16,
     background: "#fff",
+    borderRadius: 4,
   },
   infoLabel: {
     fontSize: 12,
@@ -1644,6 +1676,8 @@ const styles: Record<string, CSSProperties> = {
     padding: "10px 14px",
     fontSize: 14,
     cursor: "pointer",
+    borderRadius: 4,
+    boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
   },
   outlineButtonSmall: {
     border: "1px solid #d4d4d8",
@@ -1652,14 +1686,18 @@ const styles: Record<string, CSSProperties> = {
     fontSize: 14,
     cursor: "pointer",
     width: "100%",
+    borderRadius: 4,
+    boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
   },
   primaryButton: {
-    border: "1px solid #111827",
-    background: "#111827",
+    border: "1px solid #3296ab",
+    background: "#3296ab",
     color: "#fff",
     padding: "10px 14px",
     fontSize: 14,
     cursor: "pointer",
+    borderRadius: 4,
+    boxShadow: "0 1px 3px rgba(0,0,0,0.12)",
   },
   deleteButton: {
     border: "1px solid #fecaca",
@@ -1668,6 +1706,7 @@ const styles: Record<string, CSSProperties> = {
     padding: "10px 14px",
     fontSize: 14,
     cursor: "pointer",
+    borderRadius: 4,
   },
   deleteButtonLight: {
     border: "1px solid #fecaca",
@@ -1676,6 +1715,7 @@ const styles: Record<string, CSSProperties> = {
     padding: "10px 14px",
     fontSize: 14,
     cursor: "pointer",
+    borderRadius: 4,
   },
   iconButton: {
     border: "1px solid #d4d4d8",
@@ -1686,6 +1726,8 @@ const styles: Record<string, CSSProperties> = {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
+    borderRadius: 4,
+    boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
   },
   loginShell: {
     minHeight: "100vh",
@@ -1694,7 +1736,7 @@ const styles: Record<string, CSSProperties> = {
     alignItems: "center",
     justifyContent: "center",
     padding: 24,
-    fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
+    fontFamily: `system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`,
   },
   loginCard: {
     width: "100%",
@@ -1702,6 +1744,8 @@ const styles: Record<string, CSSProperties> = {
     background: "#fff",
     border: "1px solid #d4d4d8",
     padding: 28,
+    borderRadius: 6,
+    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
   },
   brandRow: {
     display: "flex",
@@ -1731,6 +1775,7 @@ const styles: Record<string, CSSProperties> = {
     background: "#fff",
     padding: "12px 14px",
     fontSize: 14,
+    borderRadius: 4,
   },
   missingShell: {
     minHeight: "100vh",
@@ -1739,12 +1784,14 @@ const styles: Record<string, CSSProperties> = {
     alignItems: "center",
     justifyContent: "center",
     padding: 24,
-    fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
+    fontFamily: `system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`,
   },
   missingCard: {
     background: "#fff",
     border: "1px solid #d4d4d8",
     padding: 28,
+    borderRadius: 6,
+    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
   },
   missingTitle: {
     marginTop: 0,
