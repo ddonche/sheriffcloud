@@ -29,6 +29,12 @@ type DeletePortalResponse = {
   stderr?: string
 }
 
+type DeleteFileResponse = {
+  ok: boolean
+  path?: string
+  stderr?: string
+}
+
 type BuildResponse = {
   ok: boolean
   code: number | null
@@ -386,12 +392,16 @@ export default function App() {
   const [buildingPortal, setBuildingPortal] = useState<string | null>(null)
   const [deletingPortal, setDeletingPortal] = useState<string | null>(null)
   const [buildOutput, setBuildOutput] = useState("")
+  const [deleteConfirmName, setDeleteConfirmName] = useState("")
 
   const [selectedPortal, setSelectedPortal] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [logOpen, setLogOpen] = useState(false)
   const [activeSection, setActiveSection] = useState<NavSection>("files")
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(["content", "layouts"]))
+  const [fileBrowserWidth, setFileBrowserWidth] = useState(320)
+  const [isResizingFiles, setIsResizingFiles] = useState(false)
+  const [showDeleteSite, setShowDeleteSite] = useState(false)
 
   useEffect(() => {
     // ensure admin favicon is set
@@ -420,6 +430,38 @@ export default function App() {
   }, [session])
 
   useEffect(() => {
+    if (!isResizingFiles) return
+
+    function onMouseMove(e: MouseEvent) {
+      const appMain = document.getElementById("sc-files-layout")
+      if (!appMain) return
+
+      const rect = appMain.getBoundingClientRect()
+      const next = Math.max(220, Math.min(640, e.clientX - rect.left))
+      setFileBrowserWidth(next)
+    }
+
+    function onMouseUp() {
+      setIsResizingFiles(false)
+      document.body.style.cursor = ""
+      document.body.style.userSelect = ""
+    }
+
+    document.body.style.cursor = "col-resize"
+    document.body.style.userSelect = "none"
+
+    window.addEventListener("mousemove", onMouseMove)
+    window.addEventListener("mouseup", onMouseUp)
+
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove)
+      window.removeEventListener("mouseup", onMouseUp)
+      document.body.style.cursor = ""
+      document.body.style.userSelect = ""
+    }
+  }, [isResizingFiles])
+
+  useEffect(() => {
     if (!selectedPortal && portals.length > 0) {
       const next = portals[0]
       setSelectedPortal(next)
@@ -440,6 +482,29 @@ export default function App() {
       }
     }
   }, [portals, selectedPortal])
+
+  useEffect(() => {
+    if (!selectedPortal) return
+
+    if (!selectedFile && portalFiles.length > 0) {
+      const next = pickDefaultFile(portalFiles)
+      if (next) {
+        void loadFile(selectedPortal, next)
+      }
+      return
+    }
+
+    if (selectedFile && !portalFiles.includes(selectedFile)) {
+      const next = pickDefaultFile(portalFiles)
+
+      if (next) {
+        void loadFile(selectedPortal, next)
+      } else {
+        setSelectedFile(null)
+        setFileContent("")
+      }
+    }
+  }, [portalFiles, selectedFile, selectedPortal])
 
   const fileTree = useMemo(() => buildFileTree(portalFiles), [portalFiles])
 
@@ -473,7 +538,7 @@ export default function App() {
       }
 
       const files = data.files || []
-      setPortalFiles(files)
+      setPortalFiles([...files])
 
       const folders = new Set<string>()
       for (const file of files) {
@@ -640,6 +705,8 @@ export default function App() {
       }
 
       await loadPortals()
+      setShowDeleteSite(false)
+      setDeleteConfirmName("")
       setBuildOutput(`DELETED SITE — ${portal}`)
 
       if (selectedPortal === portal) {
@@ -700,8 +767,52 @@ export default function App() {
     setExpandedFolders(folders)
   }
 
-  function handleDeleteFile() {
-    alert("Delete file is not wired yet because this file only includes read/write/build endpoints. Add your delete_file endpoint next and we can connect this button cleanly.")
+  async function handleDeleteFile() {
+    if (!selectedPortal || !selectedFile) {
+      alert("No file selected")
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete the file "${selectedFile}"?`
+    )
+
+    if (!confirmed) return
+
+    try {
+      const deletedFile = selectedFile
+
+      const res = await fetch(`${API_BASE}/delete_file?${selectedPortal}&${selectedFile}`)
+      const raw = await res.text()
+
+      let data: DeleteFileResponse
+      try {
+        data = JSON.parse(raw)
+      } catch {
+        alert(raw)
+        return
+      }
+
+      if (!data.ok) {
+        alert(data.stderr || "Failed to delete file")
+        return
+      }
+
+      // remove file from list (THIS is what actually updates UI)
+      setPortalFiles((prev) => prev.filter((f) => f !== deletedFile))
+
+      // clear selection if needed
+      if (selectedFile === deletedFile) {
+        setSelectedFile(null)
+        setFileContent("")
+      }
+
+      // log like portal delete
+      setBuildOutput(`DELETED FILE — ${deletedFile}`)
+
+    } catch (err: any) {
+      alert(err.message || "Failed to delete file")
+    }
   }
 
   async function signIn() {
@@ -747,12 +858,11 @@ export default function App() {
   }
 
   const currentSiteUrl = selectedPortal ? siteUrlForPortal(selectedPortal) : ""
-  const buildSucceeded = buildOutput.includes("BUILD SUCCESS")
-  const buildStatusText = buildOutput
-    ? buildSucceeded
-      ? "Success"
-      : "Failed"
-    : "No build yet"
+  const buildStatusText = !buildOutput
+    ? "No build yet"
+    : buildOutput.includes("BUILD FAILED")
+      ? "Failed"
+      : "Success"
 
   return (
     <div style={styles.appShell}>
@@ -938,18 +1048,70 @@ export default function App() {
               >
                 {buildingPortal === selectedPortal ? "Building..." : "Build Site"}
               </button>
-              <button
-                onClick={() => selectedPortal && deletePortal(selectedPortal)}
-                style={styles.deleteButton}
-                disabled={!selectedPortal || deletingPortal === selectedPortal}
-              >
-                {deletingPortal === selectedPortal ? "Deleting..." : "Delete Site"}
-              </button>
+              {!showDeleteSite ? (
+                <button
+                  onClick={() => setShowDeleteSite(true)}
+                  style={styles.iconButton}
+                  title="Delete site"
+                  disabled={!selectedPortal || deletingPortal === selectedPortal}
+                >
+                  <SvgIcon
+                    path="M232.7 69.9L224 96L128 96C110.3 96 96 110.3 96 128C96 145.7 110.3 160 128 160L512 160C529.7 160 544 145.7 544 128C544 110.3 529.7 96 512 96L416 96L407.3 69.9C402.9 56.8 390.7 48 376.9 48L263.1 48C249.3 48 237.1 56.8 232.7 69.9zM512 208L128 208L149.1 531.1C150.7 556.4 171.7 576 197 576L443 576C468.3 576 489.3 556.4 490.9 531.1L512 208z"
+                    size={16}
+                  />
+                </button>
+              ) : (
+                <div style={styles.deleteSiteReveal}>
+                  <div style={styles.deleteSiteWarning}>
+                    This will permanently delete the entire site.
+                  </div>
+
+                  <div style={styles.deleteSiteWarning}>
+                    Type <strong>{selectedPortal}</strong> to confirm deletion.
+                  </div>
+
+                  <input
+                    value={deleteConfirmName}
+                    onChange={(e) => setDeleteConfirmName(e.target.value)}
+                    placeholder="Enter site name"
+                    style={styles.input}
+                  />
+
+                  <div style={styles.deleteSiteActions}>
+                    <button
+                      onClick={() => {
+                        setShowDeleteSite(false)
+                        setDeleteConfirmName("")
+                      }}
+                      style={styles.outlineButton}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => selectedPortal && deletePortal(selectedPortal)}
+                      style={styles.deleteButton}
+                      disabled={
+                        !selectedPortal ||
+                        deletingPortal === selectedPortal ||
+                        deleteConfirmName !== selectedPortal
+                      }
+                    >
+                      {deletingPortal === selectedPortal ? "Deleting..." : "Delete Site"}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
           {activeSection === "files" && (
-            <div style={styles.editorLayout}>
+            <div
+              id="sc-files-layout"
+              style={{
+                ...styles.editorLayout,
+                gridTemplateColumns: `${fileBrowserWidth}px 8px minmax(0, 1fr)`,
+              }}
+            >
               <section style={styles.fileBrowserPane}>
                 <div style={styles.paneHeader}>Files</div>
 
@@ -971,6 +1133,18 @@ export default function App() {
                   </div>
                 )}
               </section>
+
+              <div
+                style={{
+                  ...styles.resizeHandle,
+                  ...(isResizingFiles ? styles.resizeHandleActive : null),
+                }}
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  setIsResizingFiles(true)
+                }}
+                title="Drag to resize file browser"
+              />
 
               <section style={styles.editorPane}>
                 <div style={styles.editorHeader}>
@@ -1305,20 +1479,37 @@ const styles: Record<string, CSSProperties> = {
     display: "flex",
     gap: 8,
     flexWrap: "wrap",
+    alignItems: "center",
+  },
+  deleteSiteReveal: {
+    display: "grid",
+    gap: 8,
+    padding: 10,
+    border: "1px solid #fecaca",
+    background: "#fff5f5",
+  },
+  deleteSiteWarning: {
+    fontSize: 12,
+    color: "#b91c1c",
+  },
+  deleteSiteActions: {
+    display: "flex",
+    gap: 8,
+    flexWrap: "wrap",
   },
   editorLayout: {
     display: "grid",
-    gridTemplateColumns: "320px minmax(0, 1fr)",
-    minHeight: 780,
+    minHeight: "calc(100vh - 180px)",
   },
   fileBrowserPane: {
-    borderRight: "1px solid #d4d4d8",
     minWidth: 0,
+    overflow: "auto",
   },
   editorPane: {
     minWidth: 0,
     display: "flex",
     flexDirection: "column",
+    overflow: "auto",
   },
   paneHeader: {
     padding: "14px 16px",
@@ -1327,7 +1518,7 @@ const styles: Record<string, CSSProperties> = {
     fontWeight: 700,
   },
   fileTreeWrap: {
-    overflowY: "auto",
+    overflow: "auto",
   },
   fileRow: {
     width: "100%",
@@ -1393,15 +1584,26 @@ const styles: Record<string, CSSProperties> = {
   },
   editorTextarea: {
     width: "100%",
-    minHeight: 680,
+    minHeight: "calc(100vh - 320px)",
     border: 0,
     outline: "none",
-    resize: "vertical",
+    resize: "none",
     padding: 16,
     boxSizing: "border-box",
     fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
     fontSize: 14,
     lineHeight: 1.6,
+    overflow: "visible",
+  },
+  resizeHandle: {
+    width: 8,
+    cursor: "col-resize",
+    background: "#f4f4f5",
+    borderLeft: "1px solid #e5e7eb",
+    borderRight: "1px solid #e5e7eb",
+  },
+  resizeHandleActive: {
+    background: "#e4e4e7",
   },
   contentCard: {
     padding: 24,
