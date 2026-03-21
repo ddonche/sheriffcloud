@@ -41,6 +41,12 @@
   --sheriff-video-border: rgba(255,255,255,0.10);
 }
 
+.hl-light { display: none; }
+.hl-dark  { display: block; }
+
+[data-theme="light"] .hl-light { display: block; }
+[data-theme="light"] .hl-dark  { display: none; }
+
 /* ========================================================================== */
 /* BASE                                                                       */
 /* ========================================================================== */

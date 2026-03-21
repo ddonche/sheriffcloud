@@ -402,7 +402,7 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [logOpen, setLogOpen] = useState(false)
   const [activeSection, setActiveSection] = useState<NavSection>("files")
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(["content", "layouts"]))
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
   const [fileBrowserWidth, setFileBrowserWidth] = useState(320)
   const [isResizingFiles, setIsResizingFiles] = useState(false)
   const [showDeleteSite, setShowDeleteSite] = useState(false)
@@ -543,17 +543,7 @@ export default function App() {
 
       const files = data.files || []
       setPortalFiles([...files])
-
-      const folders = new Set<string>()
-      for (const file of files) {
-        const parts = file.split("/")
-        let running = ""
-        for (let i = 0; i < parts.length - 1; i += 1) {
-          running = running ? `${running}/${parts[i]}` : parts[i]
-          folders.add(running)
-        }
-      }
-      setExpandedFolders(folders)
+      setExpandedFolders(new Set())
 
       const defaultFile = pickDefaultFile(files)
       if (defaultFile) {
@@ -1117,7 +1107,30 @@ export default function App() {
               }}
             >
               <section style={styles.fileBrowserPane}>
-                <div style={styles.paneHeader}>Files</div>
+                <div style={{ ...styles.paneHeader, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span>Files</span>
+                  {portalFiles.length > 0 && (() => {
+                    const allFolderPaths = new Set<string>()
+                    for (const f of portalFiles) {
+                      const parts = f.split("/")
+                      let running = ""
+                      for (let i = 0; i < parts.length - 1; i += 1) {
+                        running = running ? `${running}/${parts[i]}` : parts[i]
+                        allFolderPaths.add(running)
+                      }
+                    }
+                    const allOpen = allFolderPaths.size > 0 && [...allFolderPaths].every(f => expandedFolders.has(f))
+                    return (
+                      <button
+                        onClick={() => setExpandedFolders(allOpen ? new Set() : allFolderPaths)}
+                        style={styles.toolbarButton}
+                        title={allOpen ? "Collapse all" : "Expand all"}
+                      >
+                        {allOpen ? "↕ Collapse" : "↕ Expand"}
+                      </button>
+                    )
+                  })()}
+                </div>
 
                 {loadingFiles ? (
                   <div style={styles.emptyPane}>Loading files...</div>

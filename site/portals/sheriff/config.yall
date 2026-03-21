@@ -15,6 +15,8 @@ theme:
   brand_name: "SHERIFF"
   logo: "logo.png"
   favicon: "favicon.ico"
+  highlight_dark: "base16-ocean.dark"
+  highlight_light: "InspiredGitHub"
   overrides: {}
 
 routing:

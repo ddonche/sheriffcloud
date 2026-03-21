@@ -1,37 +1,46 @@
 /// modules/markdown_core/markdown.gbln
 /// Render Markdown in ctx["body"] → HTML, store back in ctx["body"].
-///
-/// IMPORTANT:
-/// We protect syntaxes that contain `|` before markdown parsing,
-/// because markdown tables will otherwise split on those pipes.
-///
-/// Protected before md parse:
-/// - fenced code blocks: ```...```
-/// - inline code spans: `...`
-/// - wikilinks: [[...]]   (including alias links like [[page|label]])
-///
-/// Restore order after md parse:
-/// - wikilinks (raw, so Trailboss can process them later)
-/// - inline code (as final HTML <code>...</code>)
-/// - fenced code blocks (as full HTML blocks)
 
 act render(ctx)
     body | ctx["body"]
     if body.nix? => return ctx
-    
-    clean | :sanitize_bom(body)
-    normalized | :normalize_newlines(clean)
 
-    protected | "" + normalized
+    clean      | :sanitize_bom(body)
+    normalized | :normalize_newlines(clean)
+    protected  | "" + normalized
+
+    /// ----------------------------------------------------------
+    /// Read highlight themes from portal config (same as brindle)
+    /// ----------------------------------------------------------
+    highlight_dark  | "base16-ocean.dark"
+    highlight_light | "InspiredGitHub"
+
+    portal | ctx["portal"]
+
+    if !portal.nix?
+        config_path | "../site/portals/{portal}/config.yall"
+        if :file_exists(config_path)
+            cfg | :yall_parse_file(config_path)
+            if !cfg.nix? and :valtype(cfg) == "map" and !cfg["theme"].nix?
+                theme_cfg | cfg["theme"]
+                if :valtype(theme_cfg) == "map"
+                    if !theme_cfg["highlight_dark"].nix?
+                        :update!(highlight_dark, :trim("" + theme_cfg["highlight_dark"]))
+                    xx
+                    if !theme_cfg["highlight_light"].nix?
+                        :update!(highlight_light, :trim("" + theme_cfg["highlight_light"]))
+                    xx
+                xx
+            xx
+        xx
+    xx
 
     /// --------------------------------------------------------------
-    /// 1) STASH FENCED CODE BLOCKS FIRST
+    /// 1) STASH FENCED CODE BLOCKS
     /// --------------------------------------------------------------
     fence_stash | []
     fn | 0
-
-    seg | ""
-    key | ""
+    seg, key | ""
 
     sweep protected
         "```" ... "```":
@@ -47,20 +56,14 @@ act render(ctx)
     /// --------------------------------------------------------------
     code_stash | []
     cn | 0
-
-    seg |= ""
-    key |= ""
-    inner | ""
-    html | ""
+    inner, html | ""
 
     sweep protected
         "`" ... "`":
             seg |= "" + self
             key |= "@@TB_CODE_{cn}@@"
-
             inner |= :keep_between(seg, "`", "`") ?? ""
-            html |= "<code>" + escape_text(inner) + "</code>"
-
+            html  |= "<code>" + escape_text(inner) + "</code>"
             :put_last!(code_stash, {"k": key, "v": html})
             :update_where!(protected, seg, key)
             cn += 1
@@ -71,9 +74,6 @@ act render(ctx)
     /// --------------------------------------------------------------
     wikistash | []
     wn | 0
-
-    seg |= ""
-    key |= ""
 
     sweep protected
         "[[" ... "]]":
@@ -114,8 +114,10 @@ act render(ctx)
     xx
 
     /// --------------------------------------------------------------
-    /// 7) RESTORE FENCED CODE BLOCKS
+    /// 7) RESTORE FENCED CODE BLOCKS — highlighted via :highlight_code
     /// --------------------------------------------------------------
+    lang, code | ""
+
     for item in fence_stash
         if item.nix? => skip
         k | item["k"]
@@ -123,10 +125,26 @@ act render(ctx)
         if k.nix? => skip
         if v.nix? => skip
 
-        fence_html | :md_to_html("" + v)
-        :update_where!(out, "" + k, "" + fence_html)
+        lang |= ""
+        code |= ""
+
+        sweep v
+            "```" ... "```":
+                lang |= :trim(:keep_before(:keep_after(self, "```"), "\n"))
+                code |= :trim(:keep_between(self, "\n", "```"))
+        xx
+
+        fence_html | ""
+
+        if lang == ""
+            fence_html |= "<pre><code>" + escape_text(code) + "</code></pre>"
+        else
+            fence_html |= :highlight_code(code, lang, highlight_dark, highlight_light)
+        xx
+
+        :update_where!(out, "" + k, fence_html)
     xx
-    
+
     :update!(ctx["body"], out)
     return ctx
 xx
