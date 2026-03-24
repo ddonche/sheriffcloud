@@ -1,0 +1,94 @@
+# flyctl launch added from .gitignore
+# Build output
+
+# Portal content (client sites)
+
+# Environment / secrets
+**\.env
+**\.env.*
+
+# Node (if any tools appear later)
+**\node_modules
+
+# OS junk
+**\.DS_Store
+**\Thumbs.db
+
+# Logs
+**\*.log
+
+# flyctl launch added from admin-src\.gitignore
+# Logs
+admin-src\**\logs
+admin-src\**\*.log
+admin-src\**\npm-debug.log*
+admin-src\**\yarn-debug.log*
+admin-src\**\yarn-error.log*
+admin-src\**\pnpm-debug.log*
+admin-src\**\lerna-debug.log*
+
+admin-src\**\node_modules
+admin-src\**\dist
+admin-src\**\dist-ssr
+admin-src\**\*.local
+
+# Editor directories and files
+admin-src\**\.vscode\*
+!admin-src\**\.vscode\extensions.json
+admin-src\**\.idea
+admin-src\**\.DS_Store
+admin-src\**\*.suo
+admin-src\**\*.ntvs*
+admin-src\**\*.njsproj
+admin-src\**\*.sln
+admin-src\**\*.sw?
+
+# --- SAME RULES FOR home-src ---
+home-src\**\logs
+home-src\**\*.log
+home-src\**\npm-debug.log*
+home-src\**\yarn-debug.log*
+home-src\**\yarn-error.log*
+home-src\**\pnpm-debug.log*
+home-src\**\lerna-debug.log*
+
+home-src\**\node_modules
+home-src\**\dist
+home-src\**\dist-ssr
+home-src\**\*.local
+
+home-src\**\.vscode\*
+!home-src\**\.vscode\extensions.json
+home-src\**\.idea
+home-src\**\.DS_Store
+home-src\**\*.suo
+home-src\**\*.ntvs*
+home-src\**\*.njsproj
+home-src\**\*.sln
+home-src\**\*.sw?
+
+# --- SAME RULES FOR rodeo-src ---
+rodeo-src\**\logs
+rodeo-src\**\*.log
+rodeo-src\**\npm-debug.log*
+rodeo-src\**\yarn-debug.log*
+rodeo-src\**\yarn-error.log*
+rodeo-src\**\pnpm-debug.log*
+rodeo-src\**\lerna-debug.log*
+
+rodeo-src\**\node_modules
+rodeo-src\**\dist
+rodeo-src\**\dist-ssr
+rodeo-src\**\*.local
+
+rodeo-src\**\.vscode\*
+!rodeo-src\**\.vscode\extensions.json
+rodeo-src\**\.idea
+rodeo-src\**\.DS_Store
+rodeo-src\**\*.suo
+rodeo-src\**\*.ntvs*
+rodeo-src\**\*.njsproj
+rodeo-src\**\*.sln
+rodeo-src\**\*.sw?
+
+fly.toml

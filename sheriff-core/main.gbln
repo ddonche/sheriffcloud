@@ -24,6 +24,27 @@ act create_all_dirs(path)
     xx
 xx
 
+act backup_dist(portal)
+    dist_dir    | "../dist/{portal}"
+    backup_path | "../data/backups/{portal}/latest.zip"
+
+    if :file_exists(dist_dir) == false
+        return ""
+    xx
+
+    create_all_dirs(backup_path)
+
+    :say("Backing up current dist:")
+    :say(dist_dir)
+    :say("Backup zip:")
+    :say(backup_path)
+
+    :zip_dir!(dist_dir, backup_path)
+    :delete_path!(dist_dir)
+
+    return backup_path
+xx
+
 /// --- helper: run pre schedule once, return the final pre_ctx (or {"portal": portal})
 act run_pre_schedule(portal, cfg)
     pre_ctx | { "portal": portal }
@@ -218,6 +239,8 @@ act build(portal)
     :say("Building portal:")
     :say(portal)
 
+    backup_path | backup_dist(portal)
+
     cfg      | load_events(portal)
     schedule | cfg["schedule"]   /// Array of action names
 
@@ -264,6 +287,11 @@ act build(portal)
 
     :say("Portal build finished:")
     :say(portal)
+
+    if backup_path != ""
+        :say("Backup created:")
+        :say(backup_path)
+    xx
 xx
 
 

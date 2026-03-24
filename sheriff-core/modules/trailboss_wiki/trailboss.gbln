@@ -8,6 +8,9 @@
 
 import modules/trailboss_wiki/routes_json as rjson
 
+act pipe_test_b(ctx) => return ctx
+act pipe_test_a(ctx) => return :summon(ctx, ["pipe_test_b"])
+
 /// ======================================================================
 /// 0) TINY NORMALIZERS (KEEP THIS FILE SANE)
 /// ======================================================================

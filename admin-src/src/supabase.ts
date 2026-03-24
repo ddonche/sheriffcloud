@@ -1,6 +1,10 @@
-import { createClient } from "@supabase/supabase-js"
+import { createClient, SupabaseClient } from "@supabase/supabase-js"
 
-export function getSupabase() {
+let _client: SupabaseClient | null = null
+
+export function getSupabase(): SupabaseClient | null {
+  if (_client) return _client
+
   const url = import.meta.env.VITE_SUPABASE_URL
   const key = import.meta.env.VITE_SUPABASE_ANON_KEY
 
@@ -9,5 +13,13 @@ export function getSupabase() {
     return null
   }
 
-  return createClient(url, key)
+  _client = createClient(url, key, {
+    auth: {
+      persistSession: true,
+      storage: window.localStorage,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
+  })
+  return _client
 }
