@@ -3,9 +3,9 @@ import react from "@vitejs/plugin-react"
 
 export default defineConfig({
   plugins: [react()],
-  base: "/rodeo/",
+  base: "/chatterbox/",
   build: {
-    outDir: "../dist/rodeo",
+    outDir: "../dist/chatterbox",
     emptyOutDir: false,
   },
 })
