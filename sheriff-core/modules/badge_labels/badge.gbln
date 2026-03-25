@@ -15,15 +15,10 @@ xx
 act extract_version(cfg)
     if cfg.nix? => return ""
 
-    if :valtype(cfg) != "map"
-        return ""
-    xx
+    if :valtype(cfg) != "map" => return ""
 
-    v | cfg["version"]
-    if v.nix? => return ""
-
-    t | :trim("" + v)
-    if t == "" => return ""
+    v | cfg["version"] ?? => return ""
+    t | :trim(v) ?? => return ""
 
     return t
 xx
@@ -32,17 +27,12 @@ xx
 act extract_repo(cfg)
     if cfg.nix? => return nil
 
-    if :valtype(cfg) != "map"
-        return nil
-    xx
+    if :valtype(cfg) != "map" => return nil
 
-    repo | cfg["repo"]
-    if repo.nix? => return nil
+    repo | cfg["repo"] ?? => return nil
 
     /// Only accept maps as repo objects
-    if :valtype(repo) != "map"
-        return nil
-    xx
+    if :valtype(repo) != "map" => return nil
 
     return repo
 xx
@@ -50,36 +40,17 @@ xx
 /// Build the HTML for BADGE::REPO — matches sheriff-dark.css + React header
 act build_repo_badge(repo, ver)
     /// Hard guard: if repo isn't a map, bail to "".
-    if repo.nix?
-        return ""
-    xx
-
-    if :valtype(repo) != "map"
-        return ""
-    xx
+    if repo.nix? => return ""
+    if :valtype(repo) != "map" => return ""
 
     url, name, stars, forks | ""
-
-    if !repo["url"].nix?
-        :update!(url, "" + repo["url"])
-    xx
-
-    if !repo["name"].nix?
-        :update!(name, "" + repo["name"])
-    xx
-
-    if !repo["stars"].nix?
-        :update!(stars, "" + repo["stars"])
-    xx
-
-    if !repo["forks"].nix?
-        :update!(forks, "" + repo["forks"])
-    xx
+    if !repo["url"].nix? => :update!(url, "" + repo["url"])
+    if !repo["name"].nix? => :update!(name, "" + repo["name"])
+    if !repo["stars"].nix? => :update!(stars, "" + repo["stars"])
+    if !repo["forks"].nix? => :update!(forks, "" + repo["forks"])
 
     /// If we somehow didn't get a URL, don't render a broken badge.
-    if url == ""
-        return ""
-    xx
+    if url == "" => return ""
 
     return """
 <a href="{url}" class="sheriff-github-badge">
@@ -125,9 +96,8 @@ xx
 /// Load widgets config
 act load_widgets_cfg(portal)
     path | "../site/portals/{portal}/widgets.yall"
-    if :file_exists(path) == false
-        return nil
-    xx
+    if :file_exists(path) == false => return nil
+
     return :yall_parse_file(path)
 xx
 
@@ -173,16 +143,13 @@ xx
 
 /// Generate social sharing widget HTML
 act generate_social_share_widget(portal, page_url, page_title)
-    widgets_cfg | load_widgets_cfg(portal)
-    if widgets_cfg.nix? => return ""
+    widgets_cfg | load_widgets_cfg(portal) ?? => return ""
     if :valtype(widgets_cfg) != "map" => return ""
     
-    badge_cfg | widgets_cfg["badge"]
-    if badge_cfg.nix? => return ""
+    badge_cfg | widgets_cfg["badge"] ?? => return ""
     if :valtype(badge_cfg) != "map" => return ""
     
-    platforms | badge_cfg["social_sharing"]
-    if platforms.nix? => return ""
+    platforms | badge_cfg["social_sharing"] ?? => return ""
     
     /// URL-encode the title and URL
     encoded_url | :url_encode(page_url)
@@ -191,8 +158,7 @@ act generate_social_share_widget(portal, page_url, page_title)
     icons_html | ""
     
     for platform in platforms
-        data | get_social_platform_data(platform)
-        if data.nix? => skip
+        data | get_social_platform_data(platform) ?? => skip
         
         url | data["url"]
         url | :update_where(url, "{url}", encoded_url)
@@ -208,7 +174,7 @@ act generate_social_share_widget(portal, page_url, page_title)
         update!(icons_html, icons_html + icon)
     xx
     
-    if icons_html == "" => return ""
+    if icons_html.nix? => return ""
     
     return """
 <div class="sheriff-social-share">
@@ -314,10 +280,8 @@ xx
 
 /// MAIN ENTRY
 act apply_tokens(ctx)
-    portal | ctx["portal"]
-    body   | ctx["body"]
-
-    if portal.nix? or body.nix? => return ctx
+    portal | ctx["portal"] ?? => return ctx
+    body   | ctx["body"] ?? => return ctx
 
     cfg  | load_cfg(portal)
     ver  | extract_version(cfg)

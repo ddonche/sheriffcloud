@@ -4,17 +4,16 @@
 /// (2) Register + resolve BRINDLE tokens (style, logo, brandname, theme switcher, version switcher)
 
 act resolve_theme_name(portal)
-    config_path|"../site/portals/{portal}/config.yall"
-    theme_name|"outpost"
+    config_path | "../site/portals/{portal}/config.yall"
+    theme_name  | "outpost"
 
-    if :file_exists(config_path)
-        cfg|:yall_parse_file(config_path)
-        if !cfg.nix? and :valtype(cfg)=="map" and !cfg["theme"].nix?
-            theme_cfg|cfg["theme"]
-            if :valtype(theme_cfg)=="map" and !theme_cfg["name"].nix?
-                :update!(theme_name,:trim(""+theme_cfg["name"]))
-            xx
-        xx
+    if :file_exists(config_path) == false => return theme_name
+
+    cfg       | :yall_parse_file(config_path)
+    theme_cfg | cfg["theme"] ?? nil
+
+    if :valtype(theme_cfg) == "map" and !theme_cfg["name"].nix?
+        :update!(theme_name, theme_cfg["name"].trim)
     xx
 
     return theme_name
@@ -24,38 +23,22 @@ xx
 /// JOB 1: Apply layout
 /// ------------------------------------------------------
 act apply_layout(ctx)
-    
-    body   | ctx["body"]
-    
-    portal | ctx["portal"]
-    
-    if body.nix?
-        :say("body is nil, returning early")
-        return ctx
-    xx
-    
-    if portal.nix?
-        :say("portal is nil, returning early")
-        return ctx
-    xx
+    body   | ctx["body"] ?? => return ctx
+    portal | ctx["portal"] ?? => return ctx
 
-    fm     | ctx["frontmatter"]
-    if body.nix?   => return ctx
-    if portal.nix? => return ctx
+    fm | ctx["frontmatter"]
 
     /// SAFETY: if frontmatter exists but is NOT a map → wipe it.
     if !fm.nix? and :valtype(fm) != "map"
         fm | {}
     xx
 
-    /// layout name (default "docs")
     layout_name | "docs"
-
     if :valtype(fm) == "map" and !fm["layout"].nix?
-        :update!(layout_name, :trim("" + fm["layout"]))
+        :update!(layout_name, fm["layout"].trim)
     xx
 
-    theme_name | resolve_theme_name(portal)
+    theme_name  | resolve_theme_name(portal)
     layout_path | "../sheriff-core/themes/{theme_name}/layouts/{layout_name}.html"
 
     if :file_exists(layout_path) == false
@@ -64,19 +47,18 @@ act apply_layout(ctx)
     xx
 
     layout_html | :read_text(layout_path)
+
     /// ----------------------------------------------
     /// PAGE TITLE / AUTHOR / META
     /// ----------------------------------------------
     page_title | "Untitled"
     if :valtype(fm) == "map" and !fm["title"].nix?
-        :update!(page_title, :trim(fm["title"]))
+        :update!(page_title, fm["title"].trim)
     xx
 
-    page_author | ""
+    page_author | "Unknown"
     if :valtype(fm) == "map" and !fm["author"].nix?
-        :update!(page_author, :trim(fm["author"]))
-    else 
-        :update!(page_author, "Unknown")
+        :update!(page_author, fm["author"].trim)
     xx
 
     /// ----------------------------------------------
@@ -86,13 +68,11 @@ act apply_layout(ctx)
 
     if layout_name == "blog"
         tmp_avatar | ""
-
         attempt
-            :update!(tmp_avatar, :trim(fm["author_avatar"]))
+            :update!(tmp_avatar, fm["author_avatar"].trim)
         rescue
             :update!(tmp_avatar, "")
         end
-
         if tmp_avatar != ""
             :update!(page_author_avatar, tmp_avatar)
         xx
@@ -109,11 +89,11 @@ act apply_layout(ctx)
     clear_token("PAGE", "AUTHOR")
     clear_token("PAGE", "AUTHOR_AVATAR")
     clear_token("PAGE", "META")
-    register_token("PAGE", "CONTENT", body)
-    register_token("PAGE", "TITLE",   page_title)
-    register_token("PAGE", "AUTHOR",  page_author)
+    register_token("PAGE", "CONTENT",       body)
+    register_token("PAGE", "TITLE",         page_title)
+    register_token("PAGE", "AUTHOR",        page_author)
     register_token("PAGE", "AUTHOR_AVATAR", page_author_avatar)
-    register_token("PAGE", "META",    page_meta_html)
+    register_token("PAGE", "META",          page_meta_html)
 
     scripts_html | """
     <script src="/public/js/soft_pagination.js" defer></script>
@@ -123,8 +103,7 @@ act apply_layout(ctx)
     """
 
     register_token("BRINDLE", "SCRIPTS", scripts_html)
-    
-    /// resolve ONLY PAGE tokens here
+
     final_html | resolve_token(layout_html)
     :update!(ctx["body"], final_html)
     return ctx
@@ -139,91 +118,68 @@ act build_page_meta(fm)
 
     kind, type | ""
 
-    /// meta_kind
     if !fm["meta_kind"].nix?
-        tmp | :trim("" + fm["meta_kind"])
-        if tmp != ""
-            :update!(kind, tmp)
-        xx
+        tmp | fm["meta_kind"].trim
+        if tmp != "" => :update!(kind, tmp)
     xx
 
-    /// meta_type
     if !fm["meta_type"].nix?
-        tmp2 | :trim("" + fm["meta_type"])
-        if tmp2 != ""
-            :update!(type, tmp2)
-        xx
+        tmp | fm["meta_type"].trim
+        if tmp != "" => :update!(type, tmp)
     xx
 
     if kind == "" and type == "" => return ""
 
-    html | ""
-
-    /// both → kind • type, but dot is a circle box, not text
-    if kind != "" and type != ""
-        :update!(html, """
-        <span class="sheriff-page-meta-label">
-          <span class="sheriff-page-meta-kind">{kind}</span>
-          <span class="sheriff-page-meta-dot"></span>
-          <span class="sheriff-page-meta-type">{type}</span>
-        </span>
-        """)
-    elif kind != ""
-        :update!(html, """
-        <span class="sheriff-page-meta-label">
-          <span class="sheriff-page-meta-kind">{kind}</span>
-        </span>
-        """)
-    else
-        :update!(html, """
-        <span class="sheriff-page-meta-label">
-          <span class="sheriff-page-meta-type">{type}</span>
-        </span>
-        """)
+    judge
+        kind != "" and type != "":
+            return """
+            <span class="sheriff-page-meta-label">
+              <span class="sheriff-page-meta-kind">{kind}</span>
+              <span class="sheriff-page-meta-dot"></span>
+              <span class="sheriff-page-meta-type">{type}</span>
+            </span>
+            """
+        kind != "":
+            return """
+            <span class="sheriff-page-meta-label">
+              <span class="sheriff-page-meta-kind">{kind}</span>
+            </span>
+            """
+        else:
+            return """
+            <span class="sheriff-page-meta-label">
+              <span class="sheriff-page-meta-type">{type}</span>
+            </span>
+            """
     xx
-
-    return html
 xx
 
 /// ------------------------------------------------------
 /// JOB 2: Register + resolve BRINDLE tokens
 /// ------------------------------------------------------
 act apply_tokens(ctx)
-    body   | ctx["body"]
-    portal | ctx["portal"]
-
-    if body.nix?   => return ctx
-    if portal.nix? => return ctx
+    body   | ctx["body"] ?? => return ctx
+    portal | ctx["portal"] ?? => return ctx
 
     /// --------------------------------------------------
     /// Read theme config
     /// --------------------------------------------------
-    config_path | "../site/portals/{portal}/config.yall"
-
+    config_path  | "../site/portals/{portal}/config.yall"
     theme_name   | "outpost"
     brand_name   | "Site"
     logo_name    | "logo.png"
     favicon_name | "favicon.ico"
 
     if :file_exists(config_path)
-        cfg | :yall_parse_file(config_path)
+        cfg       | :yall_parse_file(config_path)
+        theme_cfg | cfg["theme"] ?? nil
 
-        if !cfg.nix? and :valtype(cfg) == "map" and !cfg["theme"].nix?
-            theme_cfg | cfg["theme"]
-
-            if :valtype(theme_cfg) == "map"
-                if !theme_cfg["name"].nix?
-                    :update!(theme_name, :trim("" + theme_cfg["name"]))
-                xx
-                if !theme_cfg["brand_name"].nix?
-                    :update!(brand_name, :trim("" + theme_cfg["brand_name"]))
-                xx
-                if !theme_cfg["logo"].nix?
-                    :update!(logo_name, :trim("" + theme_cfg["logo"]))
-                xx
-                if !theme_cfg["favicon"].nix?
-                    :update!(favicon_name, :trim("" + theme_cfg["favicon"]))
-                xx
+        if :valtype(theme_cfg) == "map"
+            judge_all
+                !theme_cfg["name"].nix?:        :update!(theme_name,   theme_cfg["name"].trim)
+                !theme_cfg["brand_name"].nix?:  :update!(brand_name,   theme_cfg["brand_name"].trim)
+                !theme_cfg["logo"].nix?:        :update!(logo_name,    theme_cfg["logo"].trim)
+                !theme_cfg["favicon"].nix?:     :update!(favicon_name, theme_cfg["favicon"].trim)
             xx
         xx
     xx
@@ -243,7 +199,6 @@ act apply_tokens(ctx)
 
         if !assets_cfg.nix? and :valtype(assets_cfg) == "map"
             assets_map | {}
-
             attempt
                 :update!(assets_map, assets_cfg["assets"])
             rescue
@@ -252,13 +207,13 @@ act apply_tokens(ctx)
 
             if :valtype(assets_map) == "map"
                 attempt
-                    :update!(assets_head_raw, "" + assets_map["head"])
+                    :update!(assets_head_raw, assets_map["head"])
                 rescue
                     :update!(assets_head_raw, "")
                 end
 
                 attempt
-                    :update!(assets_end_raw, "" + assets_map["end"])
+                    :update!(assets_end_raw, assets_map["end"])
                 rescue
                     :update!(assets_end_raw, "")
                 end
@@ -272,7 +227,7 @@ act apply_tokens(ctx)
 
                 if :valtype(top_map) == "map"
                     attempt
-                        :update!(assets_top_tag, :trim("" + top_map["tag"]))
+                        :update!(assets_top_tag, top_map["tag"].trim)
                     rescue
                         :update!(assets_top_tag, "")
                     end
@@ -289,13 +244,13 @@ act apply_tokens(ctx)
 
                         if :valtype(attrs_map) == "map"
                             for pair in attrs_map
-                                attr_name  | "" + pair[0]
-                                attr_value | "" + pair[1]
-                                :update!(attrs_html, attrs_html + """ {attr_name}="{attr_value}""" + "\"")
-                            end
+                                attr_name  | pair[0]
+                                attr_value | pair[1]
+                                attrs_html |= attrs_html + " {attr_name}=\"{attr_value}\""
+                            xx
                         xx
 
-                        :update!(assets_top_html, """<{assets_top_tag}{attrs_html}></{assets_top_tag}>""")
+                        :update!(assets_top_html, "<{assets_top_tag}{attrs_html}></{assets_top_tag}>")
                     xx
                 xx
             xx
@@ -304,18 +259,12 @@ act apply_tokens(ctx)
 
     assets_head_html, assets_end_html | ""
 
-    if assets_head_raw != ""
-        :update!(assets_head_html, """<script src="{assets_head_raw}"></script>""")
-    xx
-
-    if assets_end_raw != ""
-        :update!(assets_end_html, """<script src="{assets_end_raw}"></script>""")
-    xx
+    if assets_head_raw != "" => assets_head_html |= "<script src=\"{assets_head_raw}\"></script>"
+    if assets_end_raw  != "" => assets_end_html  |= "<script src=\"{assets_end_raw}\"></script>"
 
     /// --------------------------------------------------
     /// BRINDLE TOKENS
     /// --------------------------------------------------
-
     style_html | """
     <link rel="icon" type="image/x-icon" href="{favicon_href}">
     <link rel="stylesheet" href="/public/css/{theme_name}.css">
@@ -351,7 +300,7 @@ act apply_tokens(ctx)
       var darkIcon  = toggle.querySelector('.theme-icon-dark');
 
       function apply(theme) {
-        root.dataset.theme = theme; // "dark" or "light"
+        root.dataset.theme = theme;
         if (theme === 'dark') {
           lightIcon.style.display = 'inline-block';
           darkIcon.style.display  = 'none';
@@ -374,7 +323,7 @@ act apply_tokens(ctx)
     })();
     </script>
     """
-    
+
     version_switcher_html | """
     <div class="sheriff-version-select">
       <span class="sheriff-version-select-label">v2.0</span>
@@ -396,10 +345,9 @@ act apply_tokens(ctx)
     register_token("ASSETS", "END",  assets_end_html)
 
     /// --------------------------------------------------
-    /// Resolve *ONLY* BRINDLE / ASSETS tokens
+    /// Resolve BRINDLE / ASSETS tokens
     /// --------------------------------------------------
     updated | resolve_token(body)
-
     :update!(ctx["body"], updated)
     return ctx
 xx
