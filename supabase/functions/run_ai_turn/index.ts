@@ -38,97 +38,57 @@ function nextSpeaker(current: Speaker, participants: Speaker[]): Speaker {
 }
 
 function buildSystemPrompt(identity: Speaker, participants: Speaker[], mode: Mode): string {
-  const others = participants.filter(p => p !== identity).map(speakerLabel)
-  const othersStr = others.length > 0 ? others.join(" and ") : "the other AI"
-  const allParticipants = ["USER", ...participants.map(speakerLabel)].join(", ")
+  const allParticipants = ["the user", ...participants.map(speakerLabel)].join(", ")
 
   const identityStyles: Record<Speaker, string> = {
-    chatgpt: "Bold, product-minded, decisive. Push for strong opinions over safe answers. Challenge weak ideas.",
-    gemini:  "Analytical, efficient, constraint-driven. Focus on feasibility, tradeoffs, and clean reasoning. Prefer precision over flair.",
-    claude:  "Thoughtful, nuanced, direct. Balance depth with clarity. Call out assumptions. Prefer honest over agreeable.",
-    grok:    "Irreverent, sharp, unconventional. Cut through noise. Prioritize signal. Don't be afraid to be blunt or contrarian.",
+    chatgpt: "You are bold and product-minded. You have strong opinions and you voice them. You don't hedge. You push ideas forward and call out weak thinking directly.",
+    gemini:  "You are precise and constraint-driven. You think about feasibility, tradeoffs, and what actually holds up under pressure. You would rather be accurate than impressive.",
+    claude:  "You are direct and a little skeptical. You notice when assumptions are being made and you say so. You would rather be honest than agreeable.",
+    grok:    "You are blunt and unconventional. You cut through noise and say what others are dancing around. You are not interested in being polished — you are interested in being right.",
   }
 
-  const modeRules: Record<Mode, string[]> = {
-    collaborative: [
-      `Mode: COLLABORATIVE.`,
-      `Goal: Co-create better ideas together through refinement.`,
+  const modeContext: Record<Mode, string> = {
+    collaborative:
+      `The goal is to build something better together. ` +
+      `Answer the user's question or task fully and directly first — bring your own ideas, angles, and substance to the table. ` +
+      `Then engage with what others have said: extend a good idea, finish a half-formed one, combine angles that work together. ` +
+      `Do not just react to the last message. Contribute to the actual topic.`,
 
-      `You MUST do at least one of the following each turn:`,
-      `- Build on another AI's idea`,
-      `- Improve or combine ideas`,
-      `- Ask 1 targeted clarification question to another AI or USER`,
+    balanced:
+      `Answer the user's question or task directly and fully. Bring your own perspective — don't just riff on what others said. ` +
+      `Then engage with the other participants: agree where you genuinely agree, push back where you don't. ` +
+      `If you had a position and someone challenges it, either defend it with actual reasoning or say specifically what changed your mind. ` +
+      `Caving without explanation is a non-answer. The user wants real takes, not consensus performance.`,
 
-      `Prefer fewer, higher-quality ideas over many weak ones.`,
-      `Do NOT just list ideas. Refine them.`,
+    adversarial:
+      `Answer the user's question or task — then find the weakest point in whatever has been said, including your own answer if warranted, and go at it directly. ` +
+      `Ask the question nobody wants to answer. Point out what breaks under pressure. ` +
+      `If someone pushes back on you, hold your ground or concede with a specific reason — not just "good point." ` +
+      `This mode exists to stress-test thinking. Conflict without substance is useless; conflict with reasoning is the goal.`,
 
-      `If another AI has already said something useful, extend it instead of repeating it.`,
-    ],
-
-    balanced: [
-      `Mode: BALANCED.`,
-      `Goal: Think clearly with selective agreement and pushback.`,
-
-      `You may:`,
-      `- Agree and extend`,
-      `- Disagree and explain why`,
-      `- Ask 1 targeted clarification question if it improves the outcome`,
-
-      `Do NOT repeat what others said.`,
-      `Add new insight, tradeoffs, or improvements.`,
-
-      `Prioritize alignment with USER intent over novelty.`,
-    ],
-
-    adversarial: [
-      `Mode: ADVERSARIAL.`,
-      `Goal: Pressure-test ideas and expose weaknesses.`,
-
-      `You MUST challenge at least one idea from USER or another AI.`,
-      `Use reasoning, not tone, to attack weak ideas.`,
-
-      `You may ask pointed questions to expose flaws.`,
-      `Example: "How does this scale?" or "What happens if X fails?"`,
-
-      `Do NOT agree unless an idea withstands scrutiny.`,
-      `No fluff. No politeness padding.`,
-    ],
-
-    decision: [
-      `Mode: DECISION.`,
-      `Goal: Deliberate briefly, then converge on the best answer.`,
-
-      `You MUST follow this structure:`,
-
-      `Phase 1: Propose 1–2 strong options.`,
-      `Phase 2: Compare your options against others.`,
-      `Phase 3: Ask 1 targeted question IF needed.`,
-      `Phase 4: Recommend a final answer with reasoning.`,
-
-      `Do NOT converge immediately.`,
-      `Do NOT list many options.`,
-      `Converge only after comparison.`,
-
-      `Focus on reaching a confident, well-reasoned conclusion.`,
-    ],
+    decision:
+      `Answer the user's question with a clear recommendation — don't hedge, don't list ten options. Pick a direction and argue for it. ` +
+      `Engage with what others recommend: challenge it if you disagree, build on it if it's right, correct it if it's incomplete. ` +
+      `Keep moving toward a conclusion. Do not reopen things that are already settled. ` +
+      `A confident recommendation with clear reasoning is the output. Not a summary of the debate.`,
   }
 
   return [
-    `You are ${speakerLabel(identity)} in a multi-party conversation with: ${allParticipants}.`,
-    `Speak ONLY as ${speakerLabel(identity)}. NEVER speak for USER or ${othersStr}.`,
-    `Answer USER's actual question directly. Do not reinterpret it.`,
-    `You are participating in an ongoing conversation with other AI agents and the user.`,
-    `The other AI agents are active participants, not just text quoted by the user.`,
-    `Respond naturally as part of the discussion, not as a final structured answer.`,
-    `Keep responses reasonably concise, but prioritize clarity and interaction over strict length.`,
-    `Avoid rigid formats like bullet lists unless absolutely necessary.`,
-    `You can address the user, another AI, or both.`,
-    `When relevant, briefly respond to another AI's point directly, but do not do this every turn.`,
-    `You may ask 1 short, relevant question if it improves the discussion.`,
-    `Do not default to formal or template-style responses.`,
-    ...modeRules[mode],
-    `Your style: ${identityStyles[identity]}`,
-  ].join(" ")
+    `You are ${speakerLabel(identity)}, one of several AI participants in a live discussion alongside ${allParticipants}.`,
+    ``,
+    `Your first job is to actually answer what the user asked — fully and directly.`,
+    `If they ask for ideas, generate ideas. If they ask for pros and cons, give pros and cons. If they ask for a recommendation, make one.`,
+    `Let the question drive the format. Use structure when it helps, skip it when it does not.`,
+    ``,
+    `Your second job is to engage with the other participants like you are in a real conversation.`,
+    `Do not announce who you are addressing. Do not restate what others said before giving your take.`,
+    `Do not perform agreement. If you changed your mind, say what specifically changed it.`,
+    `Do not step outside the conversation to analyze the request, critique how others are responding, or explain naming conventions. Stay in it.`,
+    ``,
+    modeContext[mode],
+    ``,
+    `Your voice: ${identityStyles[identity]}`,
+  ].join("\n")
 }
 
 // ── Provider callers ─────────────────────────────────────────────────────────
@@ -175,21 +135,34 @@ async function callGemini(apiKey: string, identity: Speaker, transcript: Message
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`
   const systemText = transcript.find(m => m.role === "system")?.content ?? ""
 
-  const contents = transcript
+  // Gemini requires strictly alternating user/model roles.
+  // Multiple AI turns in a row must be collapsed into one model turn.
+  const rawContents = transcript
     .filter(m => m.role !== "system")
-    .map(m => {
-      if (m.role === "user") {
-        return {
-          role: "user",
-          parts: [{ text: m.content }],
-        }
-      }
+    .map(m => ({
+      role: m.role === "user" ? "user" : "model",
+      parts: [{ text: m.role === "user" ? m.content : `${speakerLabel(m.role as Speaker)}: ${m.content}` }],
+    }))
 
-      return {
-        role: "model",
-        parts: [{ text: `${speakerLabel(m.role as Speaker)}: ${m.content}` }],
-      }
-    })
+  // Merge consecutive same-role messages
+  const contents: { role: string; parts: { text: string }[] }[] = []
+  for (const msg of rawContents) {
+    const last = contents[contents.length - 1]
+    if (last && last.role === msg.role) {
+      last.parts.push(...msg.parts)
+    } else {
+      contents.push({ role: msg.role, parts: [...msg.parts] })
+    }
+  }
+
+  // Gemini must start with a user message
+  if (contents.length > 0 && contents[0].role !== "user") {
+    contents.unshift({ role: "user", parts: [{ text: "(conversation start)" }] })
+  }
+
+  if (contents.length > 0 && contents[contents.length - 1].role === "model") {
+    contents.push({ role: "user", parts: [{ text: "(please continue)" }] })
+  }
 
   const res = await fetch(url, {
     method: "POST",
@@ -201,10 +174,22 @@ async function callGemini(apiKey: string, identity: Speaker, transcript: Message
     }),
   })
   const data = await res.json()
-  console.log("Gemini status:", res.status, JSON.stringify(data).slice(0, 300))
+  console.log("Gemini status:", res.status, JSON.stringify(data).slice(0, 500))
   if (!res.ok) throw new Error(data?.error?.message ?? "Gemini request failed")
-  const text = data?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? "").join("").trim()
-  if (!text) throw new Error("Gemini returned no text")
+
+  const blockReason = data?.promptFeedback?.blockReason
+  if (blockReason) throw new Error(`Gemini blocked the request: ${blockReason}`)
+
+  const candidate = data?.candidates?.[0]
+  if (!candidate) throw new Error(`Gemini returned no candidates — response: ${JSON.stringify(data).slice(0, 300)}`)
+
+  const finishReason = candidate?.finishReason
+  if (finishReason && finishReason !== "STOP" && finishReason !== "MAX_TOKENS") {
+    throw new Error(`Gemini stopped early: ${finishReason}`)
+  }
+
+  const text = candidate?.content?.parts?.map((p: { text?: string }) => p.text ?? "").join("").trim()
+  if (!text) throw new Error(`Gemini returned empty content — candidate: ${JSON.stringify(candidate).slice(0, 300)}`)
   return text.replace(new RegExp(`^${speakerLabel(identity)}:\\s*`, "i"), "").trim()
 }
 
@@ -235,7 +220,7 @@ async function callClaude(apiKey: string, identity: Speaker, transcript: Message
       "x-api-key": apiKey,
       "anthropic-version": "2023-06-01",
     },
-    body: JSON.stringify({ model, max_tokens: 512, system: systemText, messages }),
+    body: JSON.stringify({ model, max_tokens: 1024, system: systemText, messages }),
   })
   const data = await res.json()
   console.log("Claude status:", res.status, JSON.stringify(data).slice(0, 300))

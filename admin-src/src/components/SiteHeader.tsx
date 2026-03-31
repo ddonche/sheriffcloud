@@ -78,7 +78,14 @@ function Dropdown({
         </span>
       </button>
 
-      {open && <div className="dropdown-menu">{children}</div>}
+      {open && (
+        <div
+          className="dropdown-menu"
+          style={{ position: "absolute", zIndex: 1001 }}
+        >
+          {children}
+        </div>
+      )}
     </div>
   )
 }
@@ -121,7 +128,7 @@ export default function SiteHeader({
   }, [])
 
   return (
-    <header className="topbar">
+    <header className="topbar" style={{ position: "relative", zIndex: 1000 }}>
       <div className="container topbar-inner" ref={wrapRef}>
         <a
           href="https://sheriffcloud.com"
