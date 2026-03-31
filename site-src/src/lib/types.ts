@@ -1,9 +1,16 @@
-export interface Site {
+export type Site = {
   id: string
   name: string
   subdomain: string
   custom_domain: string | null
-  site_type: string
+  owner_id: string
+  created_at: string
+  updated_at?: string
+  site_type?: string
+  storage_used_mb?: number
+  logo_url: string | null
+  bio: string | null
+  tagline: string | null
 }
 
 export interface Author {

@@ -4,7 +4,15 @@ import type { RouterResponse } from './types'
 const SUPABASE_URL = 'https://ukyjfstfoaybvzwplrwx.supabase.co'
 const SUPABASE_KEY = 'sb_publishable_rscjPXRJKAm8ZSTRXr_wZw_-umwFzDD'
 
-const cache = new Map<string, RouterResponse>()
+type CacheEntry = {
+  data: RouterResponse
+  expiresAt: number
+}
+
+const DEFAULT_TTL = 60_000 // 1 minute
+
+const cache = new Map<string, CacheEntry>()
+const inflight = new Map<string, Promise<RouterResponse>>()
 
 export function getSubdomain(): string {
   const hostname = window.location.hostname
@@ -41,41 +49,89 @@ async function doFetch(path: string): Promise<RouterResponse> {
 
 /**
  * Fetch a route.
- * - If cached: return cache immediately, revalidate in background
- * - If not cached: fetch and cache
+ * - If fresh cached data exists: return it immediately
+ * - If stale cached data exists: return it immediately and refresh in background
+ * - If a request is already in flight: reuse it
+ * - If no cache exists: fetch and cache
  */
-export async function fetchRoute(path: string, onRevalidate?: (data: RouterResponse) => void): Promise<RouterResponse> {
+export async function fetchRoute(
+  path: string,
+  onRevalidate?: (data: RouterResponse) => void
+): Promise<RouterResponse> {
   const subdomain = getSubdomain()
   const key = `${subdomain}:${path}`
+  const now = Date.now()
 
-  if (cache.has(key)) {
-    // Return cached immediately, revalidate silently in background
-    if (onRevalidate) {
-      doFetch(path).then(fresh => {
-        cache.set(key, fresh)
-        onRevalidate(fresh)
-      }).catch(() => {})
-    }
-    return cache.get(key)!
+  const cached = cache.get(key)
+
+  // Fresh cache: instant return
+  if (cached && cached.expiresAt > now) {
+    return cached.data
   }
 
-  const data = await doFetch(path)
-  cache.set(key, data)
-  return data
+  // Reuse in-flight request if one already exists
+  if (inflight.has(key)) {
+    return inflight.get(key)!
+  }
+
+  const request = doFetch(path)
+    .then((data) => {
+      cache.set(key, {
+        data,
+        expiresAt: Date.now() + DEFAULT_TTL,
+      })
+      if (onRevalidate) onRevalidate(data)
+      return data
+    })
+    .finally(() => {
+      inflight.delete(key)
+    })
+
+  inflight.set(key, request)
+
+  // Stale cache: return immediately, refresh silently in background
+  if (cached) {
+    request.then((fresh) => {
+      if (onRevalidate) onRevalidate(fresh)
+    }).catch(() => {})
+    return cached.data
+  }
+
+  // No cache: wait for network
+  return request
 }
 
 /** Prefetch a route into cache without returning anything */
 export function prefetchRoute(path: string): void {
   const subdomain = getSubdomain()
   const key = `${subdomain}:${path}`
-  if (cache.has(key)) return
-  doFetch(path).then(data => cache.set(key, data)).catch(() => {})
+  const now = Date.now()
+
+  const cached = cache.get(key)
+  if (cached && cached.expiresAt > now) return
+  if (inflight.has(key)) return
+
+  const request = doFetch(path)
+    .then((data) => {
+      cache.set(key, {
+        data,
+        expiresAt: Date.now() + DEFAULT_TTL,
+      })
+      return data
+    })
+    .finally(() => {
+      inflight.delete(key)
+    })
+
+  inflight.set(key, request)
 }
 
 /** Bust cache for a path — call after likes/comments/edits */
 export function bustRoute(path: string): void {
   const subdomain = getSubdomain()
-  cache.delete(`${subdomain}:${path}`)
+  const key = `${subdomain}:${path}`
+  cache.delete(key)
+  inflight.delete(key)
 }
 
 export function firstImageFromContent(html: string): string | null {

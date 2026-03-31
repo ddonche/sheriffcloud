@@ -144,7 +144,7 @@ button { font-family: var(--font-ui); cursor: pointer; border: none; background:
 .page-container {
   max-width: 1100px;
   margin: 0 auto;
-  padding: 48px 24px 96px;
+  padding: 8px 24px 96px;
 }
 
 /* ── Tags ────────────────────────────────────────────────────── */
@@ -257,8 +257,64 @@ button { font-family: var(--font-ui); cursor: pointer; border: none; background:
 
 /* ── Responsive ──────────────────────────────────────────────── */
 @media (max-width: 640px) {
-  .site-header__nav { display: none; }
-  .page-container { padding: 32px 16px 72px; }
+  .site-header__inner {
+    padding: 0 16px;
+    height: 56px;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .site-header__brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    min-width: 0;
+    justify-self: start;
+  }
+
+  .site-header__wordmark {
+    font-size: 14px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .site-header__nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-width: 0;
+    overflow-x: auto;
+    white-space: nowrap;
+    justify-self: center;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .site-header__nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .site-header__nav a {
+    padding: 5px 8px;
+    font-size: 12px;
+  }
+
+  .site-header__actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    justify-self: end;
+    margin-left: 0;
+  }
+
+  .page-container {
+    padding: 2px 16px 72px;
+  }
 }
 
 /* ── Site footer ─────────────────────────────────────────────── */
@@ -414,6 +470,39 @@ button { font-family: var(--font-ui); cursor: pointer; border: none; background:
   color: var(--color-text);
   border-color: var(--color-border);
   background: var(--color-border-light);
+}
+
+.site-header__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.site-header__logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  object-fit: contain;
+  display: block;
+  flex-shrink: 0;
+}
+
+.site-header__logo-placeholder {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: var(--font-ui);
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-light);
+  flex-shrink: 0;
 }
 
 .site-header__user {

@@ -4,6 +4,7 @@ import { AuthModal } from "./components/AuthModal"
 import SiteHeader from "./components/SiteHeader"
 import { SpurPanel } from "./spur/SpurPanel"
 import AccountPanel from "./components/AccountPanel"
+import SiteSettingsPanel from "./components/SiteSettingsPanel"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -43,6 +44,9 @@ type Site = {
   owner_id: string
   site_type: "cloud" | "static"
   created_at: string
+  logo_url: string | null
+  bio: string | null
+  tagline: string | null
 }
 
 type SiteApp = {
@@ -99,15 +103,6 @@ const SB = {
 
 function cleanSubdomain(val: string) {
   return val.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "")
-}
-
-function siteUrl(subdomain: string) {
-  const url = new URL(window.location.origin)
-  if (url.hostname === "admin.localhost") url.hostname = `${subdomain}.localhost`
-  else if (url.hostname.endsWith(".sheriffcloud.com")) url.hostname = `${subdomain}.sheriffcloud.com`
-  else url.hostname = `${subdomain}.${url.hostname}`
-  url.pathname = "/"; url.search = ""; url.hash = ""
-  return url.toString()
 }
 
 // ─── New Site Modal ───────────────────────────────────────────────────────────
@@ -459,125 +454,6 @@ function Sidebar({ ownedSites, sharedSpurSites, profile, plan, selection, onSele
 
 // ─── Site Overview ────────────────────────────────────────────────────────────
 
-function SiteOverview({ site, apps, supabase, onDeleted, onSelect }: {
-  site: Site; apps: SiteApp[]; supabase: any
-  onDeleted: () => void
-  onSelect: (sel: NavSelection) => void
-}) {
-  const [showDelete, setShowDelete] = useState(false)
-  const [confirm, setConfirm] = useState("")
-  const [deleting, setDeleting] = useState(false)
-  const [siteName, setSiteName] = useState(site.name)
-  const [savingName, setSavingName] = useState(false)
-  const [logoFile, setLogoFile] = useState<File | null>(null)
-  const [logoUploading, setLogoUploading] = useState(false)
-  const [logoUrl, setLogoUrl] = useState<string | null>(null)
-
-  async function handleSaveName() {
-    if (!siteName.trim() || siteName === site.name) return
-    setSavingName(true)
-    await supabase.from("sites").update({ name: siteName.trim(), updated_at: new Date().toISOString() }).eq("id", site.id)
-    setSavingName(false)
-  }
-
-  async function handleLogoUpload() {
-    if (!logoFile) return
-    setLogoUploading(true)
-    const ext = logoFile.name.split(".").pop()
-    const path = `site-logos/${site.id}.${ext}`
-    const { data, error } = await supabase.storage.from("public").upload(path, logoFile, { upsert: true })
-    if (!error && data) {
-      const { data: urlData } = supabase.storage.from("public").getPublicUrl(path)
-      setLogoUrl(urlData.publicUrl)
-      await supabase.from("sites").update({ logo_url: urlData.publicUrl }).eq("id", site.id)
-    }
-    setLogoUploading(false)
-    setLogoFile(null)
-  }
-
-  async function handleDelete() {
-    if (confirm !== site.name) return
-    setDeleting(true)
-    await supabase.from("sites").delete().eq("id", site.id)
-    onDeleted()
-  }
-
-  return (
-    <div style={{ padding: "32px", fontFamily: FONT, overflowY: "auto", height: "100%" }}>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 32 }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, color: "#111827" }}>{site.name}</h1>
-          <a href={siteUrl(site.subdomain)} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#6b7280", textDecoration: "none", marginTop: 4, display: "block" }}>
-            {site.subdomain}.sheriffcloud.com ↗
-          </a>
-        </div>
-      </div>
-
-      <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: 24, marginBottom: 24, maxWidth: 560 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 20 }}>Site Settings</div>
-        <div style={{ marginBottom: 20 }}>
-          <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Site Name</label>
-          <div style={{ display: "flex", gap: 8 }}>
-            <input value={siteName} onChange={e => setSiteName(e.target.value)} style={{ flex: 1, border: "1px solid #d4d4d8", borderRadius: 6, padding: "9px 12px", fontSize: 14, color: "#111827", outline: "none", fontFamily: FONT }} />
-            <button onClick={handleSaveName} disabled={savingName || siteName === site.name} style={{ padding: "9px 16px", borderRadius: 6, border: "none", background: siteName !== site.name ? "#1e293b" : "#e5e7eb", color: siteName !== site.name ? "#fff" : "#9ca3af", fontSize: 13, fontWeight: 600, cursor: siteName !== site.name ? "pointer" : "default", fontFamily: FONT }}>
-              {savingName ? "Saving…" : "Save"}
-            </button>
-          </div>
-        </div>
-        <div style={{ marginBottom: 4 }}>
-          <label style={{ fontSize: 13, fontWeight: 600, color: "#374151", display: "block", marginBottom: 6 }}>Site Logo</label>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            {logoUrl && <img src={logoUrl} alt="Site logo" style={{ width: 48, height: 48, objectFit: "contain", borderRadius: 8, border: "1px solid #e5e7eb" }} />}
-            <input type="file" accept="image/*" onChange={e => setLogoFile(e.target.files?.[0] ?? null)} style={{ fontSize: 13, color: "#374151", fontFamily: FONT }} />
-            {logoFile && (
-              <button onClick={handleLogoUpload} disabled={logoUploading} style={{ padding: "7px 14px", borderRadius: 6, border: "none", background: "#1e293b", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}>
-                {logoUploading ? "Uploading…" : "Upload"}
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div style={{ fontSize: 13, fontWeight: 700, color: "#9ca3af", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 12 }}>Apps</div>
-      {apps.filter(a => a.enabled).length === 0 ? (
-        <div style={{ fontSize: 14, color: "#9ca3af" }}>No apps enabled.</div>
-      ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12, marginBottom: 32, maxWidth: 560 }}>
-          {apps.filter(a => a.enabled).map(a => {
-            const meta = APP_META[a.app]
-            const label = a.app === "spur" ? "Blog" : meta.label
-            return (
-              <button key={a.app} type="button" onClick={() => onSelect({ kind: "app", siteId: site.id, app: a.app })} style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, padding: 16, cursor: "pointer", textAlign: "left", transition: "border-color 0.1s", fontFamily: FONT }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = meta.color; e.currentTarget.style.boxShadow = `0 0 0 3px ${meta.color}18` }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = "#e5e7eb"; e.currentTarget.style.boxShadow = "none" }}
-              >
-                <div style={{ fontSize: 15, fontWeight: 700, color: meta.color, marginBottom: 4 }}>{label}</div>
-                <div style={{ fontSize: 12, color: "#9ca3af" }}>Open editor →</div>
-              </button>
-            )
-          })}
-        </div>
-      )}
-
-      <div style={{ background: "#fff", border: "1px solid #fecaca", borderRadius: 10, padding: 24, maxWidth: 560 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: "#dc2626", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 16 }}>Danger Zone</div>
-        {!showDelete ? (
-          <button onClick={() => setShowDelete(true)} style={{ padding: "8px 16px", borderRadius: 6, border: "1px solid #fca5a5", background: "none", fontSize: 13, fontWeight: 600, color: "#dc2626", cursor: "pointer", fontFamily: FONT }}>Delete Site</button>
-        ) : (
-          <>
-            <p style={{ margin: "0 0 12px", fontSize: 13, color: "#374151" }}>Type <strong>{site.name}</strong> to confirm deletion. This cannot be undone.</p>
-            <input value={confirm} onChange={e => setConfirm(e.target.value)} placeholder={site.name} style={{ display: "block", width: "100%", border: "1px solid #fca5a5", borderRadius: 4, padding: "8px 10px", fontSize: 13, marginBottom: 10, fontFamily: FONT, outline: "none" }} />
-            <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => { setShowDelete(false); setConfirm("") }} style={{ padding: "7px 14px", borderRadius: 5, border: "1px solid #d4d4d8", background: "#fff", fontSize: 13, cursor: "pointer", fontFamily: FONT }}>Cancel</button>
-              <button onClick={handleDelete} disabled={confirm !== site.name || deleting} style={{ padding: "7px 14px", borderRadius: 5, border: "none", background: "#dc2626", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", opacity: (confirm !== site.name || deleting) ? 0.4 : 1, fontFamily: FONT }}>{deleting ? "Deleting…" : "Delete"}</button>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  )
-}
-
 function StubView({ title }: { title: string }) {
   return (
     <div style={{ padding: "32px", fontFamily: FONT }}>
@@ -778,18 +654,34 @@ export default function App() {
     if (selection.kind === "forum") return <StubView title="Forum" />
 
     if (selection.kind === "site" && selectedSite) {
-      return <SiteOverview site={selectedSite} apps={siteApps[selectedSite.id] ?? []} supabase={supabase}
-        onSelect={setSelection}
-        onDeleted={() => {
-          setOwnedSites(prev => prev.filter(s => s.id !== selectedSite.id))
-          setSiteApps(prev => {
-            const next = { ...prev }
-            delete next[selectedSite.id]
-            return next
-          })
-          setSelection(null)
-        }}
-      />
+      return (
+        <SiteSettingsPanel
+          site={selectedSite}
+          apps={siteApps[selectedSite.id] ?? []}
+          supabase={supabase}
+          onSelect={setSelection}
+          onSaved={(updatedSite: any) => {
+            const normalizedSite: Site = {
+              ...updatedSite,
+              logo_url: updatedSite.logo_url ?? null,
+              bio: updatedSite.bio ?? null,
+              tagline: updatedSite.tagline ?? null,
+            }
+
+            setOwnedSites(prev => prev.map(s => s.id === normalizedSite.id ? normalizedSite : s))
+            setSharedSpurSites(prev => prev.map(s => s.id === normalizedSite.id ? normalizedSite : s))
+          }}
+          onDeleted={() => {
+            setOwnedSites(prev => prev.filter(s => s.id !== selectedSite.id))
+            setSiteApps(prev => {
+              const next = { ...prev }
+              delete next[selectedSite.id]
+              return next
+            })
+            setSelection(null)
+          }}
+        />
+      )
     }
 
     if (selection.kind === "app" && selectedSite) {

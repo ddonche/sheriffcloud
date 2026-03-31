@@ -104,16 +104,74 @@ export default function BlogIndex({ data, darkMode, onNavigate, onPrefetch }: Pr
 
   return (
     <div className="page-container">
+      <style>{`
+        @media (max-width: 768px) {
+          .blog-controls__label {
+            display: none;
+          }
+
+          .blog-controls {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            grid-template-areas:
+              "view content"
+              "category author";
+            column-gap: 16px;
+            row-gap: 12px;
+            align-items: start;
+          }
+
+          .blog-controls__group[data-mobile-slot="view"] {
+            grid-area: view;
+            align-items: flex-start !important;
+            justify-self: start;
+            min-width: 0;
+          }
+
+          .blog-controls__group[data-mobile-slot="content"] {
+            grid-area: content;
+            align-items: flex-end !important;
+            justify-self: end;
+            min-width: 0;
+          }
+
+          .blog-controls__group[data-mobile-slot="category"] {
+            grid-area: category;
+            align-items: flex-start !important;
+            justify-self: start;
+            min-width: 0;
+          }
+
+          .blog-controls__group[data-mobile-slot="author"] {
+            grid-area: author;
+            align-items: flex-end !important;
+            justify-self: end;
+            min-width: 0;
+          }
+
+          .blog-controls__group[data-mobile-slot="view"] .blog-view-toggle,
+          .blog-controls__group[data-mobile-slot="category"] .blog-type-filters {
+            justify-content: flex-start;
+          }
+
+          .blog-controls__group[data-mobile-slot="content"] .blog-type-filters,
+          .blog-controls__group[data-mobile-slot="author"] .blog-author-filters {
+            justify-content: flex-end;
+          }
+        }
+      `}</style>
       <div className="blog-hero fade-up">
-        <div className="blog-hero__label">Blog</div>
-        <h1 className="blog-hero__title">{site.name}</h1>
-        {authors.length === 1 && authors[0].bio && (
-          <p className="blog-hero__desc">{authors[0].bio}</p>
-        )}
+        <div className="blog-hero__label-row">
+          <span className="blog-hero__label">Blog</span>
+
+          {site.bio && (
+            <span className="blog-hero__tagline">{site.bio}</span>
+          )}
+        </div>
 
         {/* Controls row — view style left, authors center, content type right */}
         <div className="blog-controls">
-          <div className="blog-controls__group">
+          <div className="blog-controls__group" data-mobile-slot="view">
             <span className="blog-controls__label">View style</span>
             <div className="blog-view-toggle">
               <button
@@ -134,7 +192,7 @@ export default function BlogIndex({ data, darkMode, onNavigate, onPrefetch }: Pr
           </div>
 
           {categories.length > 0 && (
-            <div className="blog-controls__group" style={{ alignItems: 'center' }}>
+            <div className="blog-controls__group" data-mobile-slot="category" style={{ alignItems: 'center' }}>
               <span className="blog-controls__label">Filter by category</span>
               <div className="blog-type-filters">
                 {categories.map(category => {
@@ -170,7 +228,7 @@ export default function BlogIndex({ data, darkMode, onNavigate, onPrefetch }: Pr
           )}
 
           {availableTypes.length > 0 && (
-            <div className="blog-controls__group" style={{ alignItems: 'center' }}>
+            <div className="blog-controls__group" data-mobile-slot="content" style={{ alignItems: 'center' }}>
               <span className="blog-controls__label">Filter by content type</span>
               <div className="blog-type-filters">
                 {availableTypes.map(type => {
@@ -196,14 +254,13 @@ export default function BlogIndex({ data, darkMode, onNavigate, onPrefetch }: Pr
 
           {/* Author avatars — right */}
           {authors.length > 0 && (
-            <div className="blog-controls__group" style={{ alignItems: 'flex-end' }}>
+            <div className="blog-controls__group" data-mobile-slot="author" style={{ alignItems: 'flex-end' }}>
               <span className="blog-controls__label">Filter by author</span>
               <div className="blog-author-filters">
                 {authors.map(a => {
                   const active = activeAuthor === a.id
                   const name = a.display_name || a.username
                   const initials = name.split(/[\s._-]+/).map((p: string) => p[0]).join('').slice(0, 2).toUpperCase()
-                  const showCount = authors.length <= 5
 
                   return (
                     <button
@@ -216,9 +273,6 @@ export default function BlogIndex({ data, darkMode, onNavigate, onPrefetch }: Pr
                         ? <img src={a.avatar_url} alt={name} className="blog-author-filter__avatar" />
                         : <div className="blog-author-filter__placeholder">{initials}</div>
                       }
-                      {showCount && (
-                        <span className="blog-author-filter__count">{a.post_count}</span>
-                      )}
                     </button>
                   )
                 })}

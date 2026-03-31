@@ -84,7 +84,7 @@ Deno.serve(async (req) => {
   // ── Resolve site ──────────────────────────────────────────────
   const { data: site, error: siteErr } = await supabase
     .from('sites')
-    .select('id, name, subdomain, custom_domain, owner_id, site_type')
+    .select('id, name, subdomain, custom_domain, owner_id, site_type, logo_url, bio, tagline')
     .eq('subdomain', subdomain)
     .maybeSingle()
 
