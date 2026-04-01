@@ -27,6 +27,37 @@ export interface SpurAuthor extends Author {
   last_published_at: string | null
 }
 
+export interface Serial {
+  id: string
+  title: string
+  slug: string
+  tagline: string | null
+  description: string | null
+  cover_image_url: string | null
+  unit_label: string
+  status: 'ongoing' | 'complete' | 'hiatus' | 'cancelled'
+  created_at: string
+  updated_at: string
+}
+
+export interface SerialSummary {
+  id: string
+  title: string
+  slug: string
+  unit_label: string
+  status: 'ongoing' | 'complete' | 'hiatus' | 'cancelled'
+}
+
+export interface SerialChapter {
+  id: string
+  slug: string
+  title: string
+  serial_index: number
+  published_at: string | null
+  excerpt: string | null
+  content: string
+}
+
 export interface Post {
   id: string
   site_id: string
@@ -45,6 +76,11 @@ export interface Post {
   like_count: number
   user_liked: boolean
   comment_count: number
+  // Serial fields
+  is_serial: boolean
+  serial_id: string | null
+  serial_index: number | null
+  serial?: SerialSummary | null
 }
 
 export interface ContentMeta {
@@ -60,6 +96,7 @@ export interface ContentMeta {
 export type RouterResponse =
   | BlogIndexResponse
   | BlogPostResponse
+  | SerialPageResponse
   | NotFoundResponse
 
 export interface BlogIndexResponse {
@@ -74,6 +111,17 @@ export interface BlogPostResponse {
   site: Site
   post: Post
   author: Author
+  serial?: Serial | null
+  toc?: SerialChapter[]
+  prev?: { slug: string } | null
+  next?: { slug: string } | null
+}
+
+export interface SerialPageResponse {
+  type: 'serial_page'
+  site: Site
+  serial: Serial
+  chapters: SerialChapter[]
 }
 
 export interface NotFoundResponse {

@@ -8,7 +8,7 @@ import Link from "@tiptap/extension-link"
 import Placeholder from "@tiptap/extension-placeholder"
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight"
 import { createLowlight } from "lowlight"
-import type { SpurPost, SpurCategory } from "./spurTypes"
+import type { SpurPost, SpurCategory, SpurSerial } from "./spurTypes"
 import type { SpurTheme } from "./spurTheme"
 import { STATUS_CFG_DARK, STATUS_CFG_LIGHT, SPURF, SPURM } from "./spurTheme"
 import { slugify } from "./spurHelpers"
@@ -18,6 +18,42 @@ const lowlight = createLowlight()
 type DiscoveryCategory = { id: string; name: string; parent_id: string | null; sort_order: number }
 
 // ── Custom styled select ───────────────────────────────────────────────────────
+
+// Simple string-options variant for unit label / status pickers
+function SpurModalSelect({ value, onChange, options, theme }: {
+  value: string
+  onChange: (v: string) => void
+  options: string[]
+  theme: any
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div style={{ position: "relative" }}>
+      <button type="button" onClick={() => setOpen(v => !v)}
+        style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", background: "transparent", border: "none", borderBottom: `1px solid ${open ? theme.accent : theme.border}`, outline: "none", padding: "6px 0", fontSize: 14, color: theme.text, fontFamily: SPURF, cursor: "pointer", transition: "border-color 0.12s" }}>
+        <span style={{ flex: 1, textAlign: "left" }}>{value.charAt(0).toUpperCase() + value.slice(1)}</span>
+        <svg viewBox="0 0 640 640" width={10} height={10} fill={theme.dim} style={{ flexShrink: 0 }}>
+          <path d="M199 305C189.6 295.6 189.6 280.4 199 271.1C208.4 261.8 223.6 261.7 232.9 271.1L319.9 358.1L406.9 271.1C416.3 261.7 431.5 261.7 440.8 271.1C450.1 280.5 450.2 295.7 440.8 305L337 409C327.6 418.4 312.4 418.4 303.1 409L199 305z"/>
+        </svg>
+      </button>
+      {open && (
+        <>
+          <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 299 }} />
+          <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 300, background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 8, boxShadow: "0 8px 32px rgba(0,0,0,0.45)", minWidth: "100%", scrollbarWidth: "none" }}>
+            {options.map(o => (
+              <button key={o} type="button" onClick={() => { onChange(o); setOpen(false) }}
+                style={{ display: "flex", alignItems: "center", width: "100%", padding: "9px 14px", background: o === value ? theme.accentDim : "none", border: "none", color: o === value ? theme.accent : theme.text, fontSize: 13, fontFamily: SPURF, cursor: "pointer", textAlign: "left" }}
+                onMouseEnter={e => { if (o !== value) e.currentTarget.style.background = theme.borderLight }}
+                onMouseLeave={e => { if (o !== value) e.currentTarget.style.background = "none" }}>
+                {o.charAt(0).toUpperCase() + o.slice(1)}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
 
 function SpurSelect({ value, onChange, options, placeholder, disabled, theme }: {
   value: string
@@ -59,7 +95,7 @@ function SpurSelect({ value, onChange, options, placeholder, disabled, theme }: 
       {open && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 99 }} />
-          <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 100, background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 8, boxShadow: "0 8px 32px rgba(0,0,0,0.45)", minWidth: "100%", maxHeight: 280, overflowY: "auto" }}>
+          <div className="spur-select-dropdown" style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 100, background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 8, boxShadow: "0 8px 32px rgba(0,0,0,0.45)", minWidth: "100%", maxHeight: 280, overflowY: "auto", scrollbarWidth: "none" }}>
             <button type="button" onClick={() => { onChange(""); setOpen(false) }}
               style={{ display: "flex", alignItems: "center", width: "100%", padding: "9px 14px", background: "none", border: "none", borderBottom: `1px solid ${theme.borderLight}`, color: theme.muted, fontSize: 13, fontFamily: SPURF, cursor: "pointer", textAlign: "left" }}
               onMouseEnter={e => e.currentTarget.style.background = theme.borderLight}
@@ -123,10 +159,27 @@ export function SpurPostEditor({
   const [discoveryEnabled, setDiscoveryEnabled] = useState<boolean>(!!existingPost?.is_in_discovery)
   const [discoveryChannelId, setDiscoveryChannelId] = useState<string>("")
   const [discoveryCategoryId, setDiscoveryCategoryId] = useState<string>(existingPost?.discovery_category_id ?? "")
-  const [discoveryHelpOpen, setDiscoveryHelpOpen] = useState(false)
   const [discoveryRows, setDiscoveryRows] = useState<DiscoveryCategory[]>([])
   const [categories, setCategories] = useState<SpurCategory[]>([])
   const [categoryId, setCategoryId] = useState<string>(existingPost?.category_id ?? "")
+  const [serials, setSerials] = useState<SpurSerial[]>([])
+  const [isSerial, setIsSerial] = useState<boolean>(!!existingPost?.is_serial)
+  const [serialId, setSerialId] = useState<string>(existingPost?.serial_id ?? "")
+
+  const [serialModalOpen, setSerialModalOpen] = useState(false)
+  const [serialModalTitle, setSerialModalTitle] = useState("")
+  const [serialModalDesc, setSerialModalDesc] = useState("")
+  const [serialModalUnitLabel, setSerialModalUnitLabel] = useState("Chapter")
+  const [serialModalStatus, setSerialModalStatus] = useState("ongoing")
+  const [serialModalCover, setSerialModalCover] = useState<string | null>(null)
+  const [serialModalCoverUploading, setSerialModalCoverUploading] = useState(false)
+  const [serialModalSaving, setSerialModalSaving] = useState(false)
+  const [serialModalError, setSerialModalError] = useState<string | null>(null)
+  const serialModalCoverRef = useRef<HTMLInputElement>(null)
+  const [categoryModalOpen, setCategoryModalOpen] = useState(false)
+  const [categoryModalName, setCategoryModalName] = useState("")
+  const [categoryModalSaving, setCategoryModalSaving] = useState(false)
+  const [categoryModalError, setCategoryModalError] = useState<string | null>(null)
 
   useEffect(() => {
     supabase.from("spur_categories").select("*").eq("site_id", siteId).order("name")
@@ -140,7 +193,18 @@ export function SpurPostEditor({
           if (sub?.parent_id) setDiscoveryChannelId(sub.parent_id)
         }
       })
+    supabase
+      .from("spur_serials")
+      .select("*")
+      .eq("site_id", siteId)
+      .then(({ data }: any) => {
+        if (data) setSerials(data)
+      })
   }, [siteId])
+
+  async function handleSerialChange(v: string) {
+    setSerialId(v)
+  }
 
   const editor = useEditor({
     extensions: [
@@ -154,6 +218,74 @@ export function SpurPostEditor({
     ],
     content: post?.content ?? "",
   })
+
+  async function handleSerialCoverUpload(file: File) {
+    setSerialModalCoverUploading(true)
+    try {
+      const ext = (file.name.split(".").pop() || "jpg").toLowerCase()
+      const safeExt = ["jpg", "jpeg", "png", "webp"].includes(ext) ? ext : "jpg"
+      const path = `serial-covers/${siteId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${safeExt}`
+      const { error: upErr } = await supabase.storage.from("spur-media").upload(path, file, { upsert: false, contentType: `image/${safeExt === "jpg" ? "jpeg" : safeExt}` })
+      if (upErr) throw new Error(upErr.message)
+      const { data: { publicUrl } } = supabase.storage.from("spur-media").getPublicUrl(path)
+      setSerialModalCover(publicUrl)
+    } catch (err: any) {
+      setSerialModalError(err.message ?? "Cover upload failed.")
+    } finally {
+      setSerialModalCoverUploading(false)
+    }
+  }
+
+  async function handleCreateSerial() {
+    if (!serialModalTitle.trim()) { setSerialModalError("Title is required."); return }
+    setSerialModalSaving(true); setSerialModalError(null)
+    try {
+      const { data, error } = await supabase.from("spur_serials").insert({
+        site_id: siteId,
+        author_id: userId,
+        title: serialModalTitle.trim(),
+        description: serialModalDesc.trim() || null,
+        unit_label: serialModalUnitLabel,
+        status: serialModalStatus,
+        cover_image_url: serialModalCover,
+      }).select().single()
+      if (error) throw new Error(error.message)
+      setSerials(prev => [...prev, data])
+      setSerialId(data.id)
+      setIsSerial(true)
+      setSerialModalOpen(false)
+      setSerialModalTitle("")
+      setSerialModalDesc("")
+      setSerialModalCover(null)
+    } catch (err: any) {
+      setSerialModalError(err.message ?? "Failed to create serial.")
+    } finally {
+      setSerialModalSaving(false)
+    }
+  }
+
+  async function handleCreateCategory() {
+    if (!categoryModalName.trim()) { setCategoryModalError("Name is required."); return }
+    setCategoryModalSaving(true); setCategoryModalError(null)
+    try {
+      const slug = categoryModalName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
+      const { data, error } = await supabase.from("spur_categories").insert({
+        site_id: siteId,
+        name: categoryModalName.trim(),
+        slug,
+        color: "#f29106",
+      }).select().single()
+      if (error) throw new Error(error.message)
+      setCategories(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)))
+      setCategoryId(data.id)
+      setCategoryModalOpen(false)
+      setCategoryModalName("")
+    } catch (err: any) {
+      setCategoryModalError(err.message ?? "Failed to create category.")
+    } finally {
+      setCategoryModalSaving(false)
+    }
+  }
 
   function handleTitleChange(val: string) {
     setTitle(val)
@@ -219,32 +351,82 @@ export function SpurPostEditor({
     if (status === "published" && !thumbnailUrl) { setError("A thumbnail is required before publishing."); return }
     if (discoveryEnabled && !discoveryChannelId) { setError("Choose a discovery channel."); return }
     if (discoveryEnabled && !discoveryCategoryId) { setError("Choose a channel category."); return }
+
     setSaving(true); setError(null)
     try {
       const content = editor?.getHTML() ?? ""
+      const nextSlug = slug.trim() || slugify(title)
+
+      let nextSerialIndex: number | null = null
+      if (isSerial && serialId) {
+        if (post?.serial_id === serialId && post?.serial_index != null) {
+          nextSerialIndex = post.serial_index
+        } else {
+          const { data: idxData } = await supabase
+            .from("spur_posts")
+            .select("serial_index")
+            .eq("serial_id", serialId)
+            .order("serial_index", { ascending: false })
+            .limit(1)
+          const max = (idxData as any)?.[0]?.serial_index ?? -1
+          nextSerialIndex = max + 1
+        }
+      }
+
       const payload = {
-        site_id: siteId, author_id: userId,
-        title: title.trim(), slug: slug.trim() || slugify(title),
-        excerpt: excerpt.trim() || null, content, thumbnail_url: thumbnailUrl, status, tags,
+        site_id: siteId,
+        author_id: userId,
+        title: title.trim(),
+        slug: nextSlug,
+        excerpt: excerpt.trim() || null,
+        content,
+        thumbnail_url: thumbnailUrl,
+        status,
+        tags,
         category_id: categoryId || null,
         is_in_discovery: discoveryEnabled,
         discovery_category_id: discoveryEnabled ? discoveryCategoryId : null,
-        content_meta: { has_images: /<img/.test(content), has_code: /<code/.test(content), has_links: /<a\s/.test(content) },
+        content_meta: {
+          has_images: /<img/.test(content),
+          has_code: /<code/.test(content),
+          has_links: /<a\s/.test(content),
+        },
         published_at: status === "published" ? (post?.published_at ?? new Date().toISOString()) : null,
         updated_at: new Date().toISOString(),
+        is_serial: isSerial,
+        serial_id: isSerial ? serialId : null,
+        serial_index: nextSerialIndex,
       }
+
       let saved: SpurPost
+
       if (post) {
-        const { data, error: e } = await supabase.from("spur_posts").update(payload).eq("id", post.id).select().single()
-        if (e) throw new Error(e.code === "23505" ? `Slug "${slug}" already used.` : e.message)
+        const { data, error: e } = await supabase
+          .from("spur_posts")
+          .update(payload)
+          .eq("id", post.id)
+          .select()
+          .single()
+
+        if (e) throw new Error(e.message)
         saved = data
       } else {
-        const { data, error: e } = await supabase.from("spur_posts").insert(payload).select().single()
-        if (e) throw new Error(e.code === "23505" ? `Slug "${slug}" already used.` : e.message)
+        const { data, error: e } = await supabase
+          .from("spur_posts")
+          .insert(payload)
+          .select()
+          .single()
+
+        if (e) throw new Error(e.code === "23505" ? `Slug "${nextSlug}" already used.` : e.message)
         saved = data
       }
+
       onSaved(saved)
-    } catch (err: any) { setError(err.message) } finally { setSaving(false) }
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const stCfg = darkMode ? STATUS_CFG_DARK : STATUS_CFG_LIGHT
@@ -288,6 +470,7 @@ export function SpurPostEditor({
         .spur-editor .ProseMirror strong { font-weight: 600; }
         .spur-editor .ProseMirror em { font-style: italic; }
         .spur-editor .ProseMirror p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: ${theme.dim}; pointer-events: none; float: left; height: 0; font-style: italic; font-family: "Lora", Georgia, serif; }
+        .spur-select-dropdown::-webkit-scrollbar { display: none; }
       `}</style>
 
       {/* Top chrome */}
@@ -370,7 +553,7 @@ export function SpurPostEditor({
                   style={{ flexShrink: 0, padding: "2px 10px", borderRadius: 4, border: `1px solid ${theme.border}`, background: "transparent", color: theme.muted, fontFamily: SPURF, fontSize: 11, cursor: thumbUploading ? "default" : "pointer", whiteSpace: "nowrap" }}>
                   {thumbUploading ? "Uploading…" : thumbnailUrl ? "Replace" : "Upload"}
                 </button>
-                {status === "published" && !thumbnailUrl && <span style={{ fontSize: 10, color: theme.red, fontWeight: 700, whiteSpace: "nowrap" }}>Required</span>}
+                {!thumbnailUrl && <span style={{ fontSize: 10, color: theme.red, fontWeight: 700, whiteSpace: "nowrap" }}>Required</span>}
                 {thumbnailUrl && (
                   <>
                     <span style={{ fontSize: 11, color: theme.muted, fontFamily: SPURM, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{thumbnailUrl.split("/").pop()}</span>
@@ -387,59 +570,24 @@ export function SpurPostEditor({
               style={{ width: "100%", background: "transparent", border: "none", borderBottom: `1px solid ${theme.border}`, outline: "none", padding: "5px 0", fontSize: 14, color: theme.muted, fontFamily: SPURF, lineHeight: 1.65, resize: "none" }} />
           </div>
 
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, paddingBottom: 16, borderBottom: `1px solid ${theme.border}`, flexWrap: "wrap" }}>
-
-              {/* Help icon */}
-              <div style={{ position: "relative", flexShrink: 0 }}
-                onMouseEnter={() => setDiscoveryHelpOpen(true)}
-                onMouseLeave={() => setDiscoveryHelpOpen(false)}
-              >
-                <svg viewBox="0 0 640 640" width={20} height={20} fill={theme.dim} style={{ display: "block", cursor: "help" }}>
-                  <path d="M320 576C461.4 576 576 461.4 576 320C576 178.6 461.4 64 320 64C178.6 64 64 178.6 64 320C64 461.4 178.6 576 320 576zM288 224C288 206.3 302.3 192 320 192C337.7 192 352 206.3 352 224C352 241.7 337.7 256 320 256C302.3 256 288 241.7 288 224zM280 288L328 288C341.3 288 352 298.7 352 312L352 400L360 400C373.3 400 384 410.7 384 424C384 437.3 373.3 448 360 448L280 448C266.7 448 256 437.3 256 424C256 410.7 266.7 400 280 400L304 400L304 336L280 336C266.7 336 256 325.3 256 312C256 298.7 266.7 288 280 288z"/>
-                </svg>
-                {discoveryHelpOpen && (
-                  <div style={{ position: "absolute", top: 28, left: 0, zIndex: 20, width: 300, padding: "12px 14px", borderRadius: 8, background: theme.surface, border: `1px solid ${theme.border}`, boxShadow: "0 8px 32px rgba(0,0,0,0.45)", color: theme.muted, fontFamily: SPURF, fontSize: 12, lineHeight: 1.6 }}>
-                    Turn this on to include the post in Spur's discovery feed. Pick a channel and category so readers can find it.
-                  </div>
-                )}
-              </div>
-
-              {/* Toggle */}
-              <button type="button"
-                onClick={() => setDiscoveryEnabled(prev => { const next = !prev; if (!next) { setDiscoveryChannelId(""); setDiscoveryCategoryId("") } return next })}
-                aria-pressed={discoveryEnabled}
-                style={{ width: 40, height: 22, borderRadius: 999, border: `1px solid ${discoveryEnabled ? theme.accent : theme.border}`, background: discoveryEnabled ? theme.accent : "transparent", position: "relative", transition: "all 0.12s", cursor: "pointer", padding: 0, flexShrink: 0 }}
-              >
-                <span style={{ position: "absolute", top: 2, left: discoveryEnabled ? 20 : 2, width: 16, height: 16, borderRadius: 999, background: "#fff", transition: "left 0.12s" }} />
-              </button>
-              <span style={{ fontSize: 12, color: discoveryEnabled ? theme.text : theme.muted, fontFamily: SPURM, whiteSpace: "nowrap", flexShrink: 0 }}>Include in discovery</span>
-
-              <SpurSelect theme={theme}
-                value={discoveryChannelId}
-                onChange={v => { setDiscoveryChannelId(v); setDiscoveryCategoryId("") }}
-                placeholder="Discovery channel"
-                disabled={!discoveryEnabled}
-                options={discoveryRows.filter(r => !r.parent_id).map(r => ({ value: r.id, label: r.name }))}
-              />
-              <SpurSelect theme={theme}
-                value={discoveryCategoryId}
-                onChange={setDiscoveryCategoryId}
-                placeholder="Channel category"
-                disabled={!discoveryEnabled || !discoveryChannelId}
-                options={discoveryRows.filter(r => r.parent_id === discoveryChannelId).map(r => ({ value: r.id, label: r.name }))}
-              />
-            </div>
-          </div>
-
+          {/* Category + tags */}
           <div style={{ marginBottom: 20 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, paddingBottom: 12, borderBottom: `1px solid ${theme.border}`, flexWrap: "wrap" }}>
-              <SpurSelect theme={theme}
-                value={categoryId}
-                onChange={setCategoryId}
-                placeholder="Blog category…"
-                options={categories.map(c => ({ value: c.id, label: c.name, color: c.color }))}
-              />
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <SpurSelect theme={theme}
+                  value={categoryId}
+                  onChange={setCategoryId}
+                  placeholder="Category…"
+                  options={categories.map(c => ({ value: c.id, label: c.name, color: c.color }))}
+                />
+                <button type="button" onClick={() => { setCategoryModalOpen(true); setCategoryModalName(""); setCategoryModalError(null) }}
+                  title="New category"
+                  style={{ width: 28, height: 28, borderRadius: 6, border: `1px solid ${theme.border}`, background: "transparent", color: theme.muted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "color 0.1s, border-color 0.1s" }}
+                  onMouseEnter={e => { e.currentTarget.style.color = theme.text; e.currentTarget.style.borderColor = theme.accent }}
+                  onMouseLeave={e => { e.currentTarget.style.color = theme.muted; e.currentTarget.style.borderColor = theme.border }}>
+                  <svg viewBox="0 0 640 640" width={9} height={9} fill="currentColor"><path d="M320 64C306.7 64 296 74.7 296 88L296 296L88 296C74.7 296 64 306.7 64 320C64 333.3 74.7 344 88 344L296 344L296 552C296 565.3 306.7 576 320 576C333.3 576 344 565.3 344 552L344 344L552 344C565.3 344 576 333.3 576 320C576 306.7 565.3 296 552 296L344 296L344 88C344 74.7 333.3 64 320 64z"/></svg>
+                </button>
+              </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 5, alignItems: "center", flex: 1, minWidth: 0 }}>
                 {tags.map(tag => (
                   <span key={tag} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 400, color: theme.accent, background: theme.accentDim, padding: "3px 8px", borderRadius: 4, fontFamily: SPURM, letterSpacing: "0.02em", border: `1px solid ${theme.accent}22` }}>
@@ -455,6 +603,219 @@ export function SpurPostEditor({
               </div>
             </div>
           </div>
+
+          {/* Discovery + Serial row */}
+          <div style={{ display: "flex", alignItems: "center", gap: 20, paddingBottom: 16, marginBottom: 20, borderBottom: `1px solid ${theme.border}`, flexWrap: "wrap" }}>
+
+            {/* Discovery toggle */}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+              <button type="button"
+                onClick={() => setDiscoveryEnabled(prev => { const next = !prev; if (!next) { setDiscoveryChannelId(""); setDiscoveryCategoryId("") } return next })}
+                aria-pressed={discoveryEnabled}
+                style={{ width: 34, height: 18, borderRadius: 999, border: `1px solid ${discoveryEnabled ? theme.accent : theme.border}`, background: discoveryEnabled ? theme.accent : "transparent", position: "relative", transition: "all 0.12s", cursor: "pointer", padding: 0, flexShrink: 0 }}>
+                <span style={{ position: "absolute", top: 1, left: discoveryEnabled ? 17 : 1, width: 14, height: 14, borderRadius: 999, background: discoveryEnabled ? "#fff" : theme.dim, transition: "left 0.12s, background 0.12s" }} />
+              </button>
+              <span style={{ fontSize: 12, color: discoveryEnabled ? theme.text : theme.muted, fontFamily: SPURM, whiteSpace: "nowrap", transition: "color 0.12s" }}>Discovery</span>
+              <div style={{ position: "relative", display: "flex", alignItems: "center" }}
+                onMouseEnter={e => (e.currentTarget.querySelector(".disc-tip") as HTMLElement | null)?.style && ((e.currentTarget.querySelector(".disc-tip") as HTMLElement).style.opacity = "1")}
+                onMouseLeave={e => (e.currentTarget.querySelector(".disc-tip") as HTMLElement | null)?.style && ((e.currentTarget.querySelector(".disc-tip") as HTMLElement).style.opacity = "0")}>
+                <svg viewBox="0 0 640 640" width={13} height={13} fill={theme.dim} style={{ display: "block", cursor: "help", opacity: 0.6 }}>
+                  <path d="M320 576C461.4 576 576 461.4 576 320C576 178.6 461.4 64 320 64C178.6 64 64 178.6 64 320C64 461.4 178.6 576 320 576zM288 224C288 206.3 302.3 192 320 192C337.7 192 352 206.3 352 224C352 241.7 337.7 256 320 256C302.3 256 288 241.7 288 224zM280 288L328 288C341.3 288 352 298.7 352 312L352 400L360 400C373.3 400 384 410.7 384 424C384 437.3 373.3 448 360 448L280 448C266.7 448 256 437.3 256 424C256 410.7 266.7 400 280 400L304 400L304 336L280 336C266.7 336 256 325.3 256 312C256 298.7 266.7 288 280 288z"/>
+                </svg>
+                <div className="disc-tip" style={{ position: "absolute", bottom: "calc(100% + 6px)", left: "50%", transform: "translateX(-50%)", zIndex: 20, width: 260, padding: "10px 12px", borderRadius: 8, background: theme.surface, border: `1px solid ${theme.border}`, boxShadow: "0 8px 32px rgba(0,0,0,0.45)", color: theme.muted, fontFamily: SPURF, fontSize: 12, lineHeight: 1.6, pointerEvents: "none", opacity: 0, transition: "opacity 0.12s", whiteSpace: "normal" }}>
+                  Include this post in Spur's public discovery feed so readers outside your site can find it.
+                </div>
+              </div>
+            </div>
+
+            {discoveryEnabled && (
+              <>
+                <SpurSelect theme={theme}
+                  value={discoveryChannelId}
+                  onChange={v => { setDiscoveryChannelId(v); setDiscoveryCategoryId("") }}
+                  placeholder="Channel…"
+                  options={discoveryRows.filter(r => !r.parent_id).map(r => ({ value: r.id, label: r.name }))}
+                />
+                <SpurSelect theme={theme}
+                  value={discoveryCategoryId}
+                  onChange={setDiscoveryCategoryId}
+                  placeholder="Category…"
+                  disabled={!discoveryChannelId}
+                  options={discoveryRows.filter(r => r.parent_id === discoveryChannelId).map(r => ({ value: r.id, label: r.name }))}
+                />
+              </>
+            )}
+
+            <div style={{ width: 1, height: 16, background: theme.border, flexShrink: 0 }} />
+
+            {/* Serial toggle */}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+              <button type="button"
+                onClick={() => {
+                  setIsSerial(prev => {
+                    const next = !prev
+                    if (!next) {
+                      setSerialId("")
+                    }
+                    return next
+                  })
+                }}
+                aria-pressed={isSerial}
+                style={{ width: 34, height: 18, borderRadius: 999, border: `1px solid ${isSerial ? theme.accent : theme.border}`, background: isSerial ? theme.accent : "transparent", position: "relative", transition: "all 0.12s", cursor: "pointer", padding: 0, flexShrink: 0 }}>
+                <span style={{ position: "absolute", top: 1, left: isSerial ? 17 : 1, width: 14, height: 14, borderRadius: 999, background: isSerial ? "#fff" : theme.dim, transition: "left 0.12s, background 0.12s" }} />
+              </button>
+              <span style={{ fontSize: 12, color: isSerial ? theme.text : theme.muted, fontFamily: SPURM, whiteSpace: "nowrap", transition: "color 0.12s" }}>Serial</span>
+              <div style={{ position: "relative", display: "flex", alignItems: "center" }}
+                onMouseEnter={e => (e.currentTarget.querySelector(".serial-tip") as HTMLElement | null)?.style && ((e.currentTarget.querySelector(".serial-tip") as HTMLElement).style.opacity = "1")}
+                onMouseLeave={e => (e.currentTarget.querySelector(".serial-tip") as HTMLElement | null)?.style && ((e.currentTarget.querySelector(".serial-tip") as HTMLElement).style.opacity = "0")}>
+                <svg viewBox="0 0 640 640" width={13} height={13} fill={theme.dim} style={{ display: "block", cursor: "help", opacity: 0.6 }}>
+                  <path d="M320 576C461.4 576 576 461.4 576 320C576 178.6 461.4 64 320 64C178.6 64 64 178.6 64 320C64 461.4 178.6 576 320 576zM288 224C288 206.3 302.3 192 320 192C337.7 192 352 206.3 352 224C352 241.7 337.7 256 320 256C302.3 256 288 241.7 288 224zM280 288L328 288C341.3 288 352 298.7 352 312L352 400L360 400C373.3 400 384 410.7 384 424C384 437.3 373.3 448 360 448L280 448C266.7 448 256 437.3 256 424C256 410.7 266.7 400 280 400L304 400L304 336L280 336C266.7 336 256 325.3 256 312C256 298.7 266.7 288 280 288z"/>
+                </svg>
+                <div className="serial-tip" style={{ position: "absolute", bottom: "calc(100% + 6px)", left: "50%", transform: "translateX(-50%)", zIndex: 20, width: 260, padding: "10px 12px", borderRadius: 8, background: theme.surface, border: `1px solid ${theme.border}`, boxShadow: "0 8px 32px rgba(0,0,0,0.45)", color: theme.muted, fontFamily: SPURF, fontSize: 12, lineHeight: 1.6, pointerEvents: "none", opacity: 0, transition: "opacity 0.12s", whiteSpace: "normal" }}>
+                  Is this post part of an ongoing series, like a book, podcast, or recurring column?
+                </div>
+              </div>
+            </div>
+
+            {isSerial && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <SpurSelect theme={theme}
+                  value={serialId}
+                  onChange={handleSerialChange}
+                  placeholder="Pick a serial…"
+                  options={serials.map(s => ({ value: s.id, label: s.title }))}
+                />
+                <button type="button" onClick={() => { setSerialModalOpen(true); setSerialModalTitle(""); setSerialModalError(null) }}
+                  title="New serial"
+                  style={{ width: 28, height: 28, borderRadius: 6, border: `1px solid ${theme.border}`, background: "transparent", color: theme.muted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "color 0.1s, border-color 0.1s" }}
+                  onMouseEnter={e => { e.currentTarget.style.color = theme.text; e.currentTarget.style.borderColor = theme.accent }}
+                  onMouseLeave={e => { e.currentTarget.style.color = theme.muted; e.currentTarget.style.borderColor = theme.border }}>
+                  <svg viewBox="0 0 640 640" width={9} height={9} fill="currentColor"><path d="M320 64C306.7 64 296 74.7 296 88L296 296L88 296C74.7 296 64 306.7 64 320C64 333.3 74.7 344 88 344L296 344L296 552C296 565.3 306.7 576 320 576C333.3 576 344 565.3 344 552L344 344L552 344C565.3 344 576 333.3 576 320C576 306.7 565.3 296 552 296L344 296L344 88C344 74.7 333.3 64 320 64z"/></svg>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Serial create modal */}
+          {serialModalOpen && (
+            <>
+              <div onClick={() => setSerialModalOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(3px)" }} />
+              <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)", zIndex: 201, width: 520, maxHeight: "90vh", overflowY: "auto", scrollbarWidth: "none", background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: 28, boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: theme.dim, letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: SPURM, marginBottom: 20 }}>New Serial</div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+                  {/* Title */}
+                  <div>
+                    <div style={{ fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: theme.dim, fontFamily: SPURM, fontWeight: 500, marginBottom: 5 }}>Title</div>
+                    <input value={serialModalTitle} onChange={e => setSerialModalTitle(e.target.value)}
+                      placeholder="Serial title…" autoFocus
+                      style={{ width: "100%", background: "transparent", border: "none", borderBottom: `1px solid ${theme.border}`, outline: "none", padding: "6px 0", fontSize: 16, fontWeight: 600, color: theme.text, fontFamily: SPURF }} />
+                  </div>
+
+                  {/* Description */}
+                  <div>
+                    <div style={{ fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: theme.dim, fontFamily: SPURM, fontWeight: 500, marginBottom: 5 }}>Description</div>
+                    <textarea value={serialModalDesc} onChange={e => setSerialModalDesc(e.target.value)}
+                      placeholder="What's this serial about?" rows={2}
+                      style={{ width: "100%", background: "transparent", border: "none", borderBottom: `1px solid ${theme.border}`, outline: "none", padding: "6px 0", fontSize: 14, color: theme.text, fontFamily: SPURF, resize: "none", lineHeight: 1.6 }} />
+                  </div>
+
+                  {/* Unit Label + Status */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                    <div>
+                      <div style={{ fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: theme.dim, fontFamily: SPURM, fontWeight: 500, marginBottom: 5 }}>Unit Label</div>
+                      <SpurModalSelect value={serialModalUnitLabel} onChange={setSerialModalUnitLabel}
+                        options={["Chapter","Part","Episode","Issue","Volume","Entry","Installment"]} theme={theme} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: theme.dim, fontFamily: SPURM, fontWeight: 500, marginBottom: 5 }}>Status</div>
+                      <SpurModalSelect value={serialModalStatus} onChange={setSerialModalStatus}
+                        options={["ongoing","completed","hiatus","cancelled"]} theme={theme} />
+                    </div>
+                  </div>
+
+                  {/* Cover image */}
+                  <div>
+                    <div style={{ fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: theme.dim, fontFamily: SPURM, fontWeight: 500, marginBottom: 5 }}>Cover Image</div>
+                    <input ref={serialModalCoverRef} type="file" accept="image/*" style={{ display: "none" }}
+                      onChange={e => { const f = e.target.files?.[0]; if (f) handleSerialCoverUpload(f); e.target.value = "" }} />
+                    {serialModalCover ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <img src={serialModalCover} alt="Cover" style={{ width: 52, height: "auto", borderRadius: 5, border: `1px solid ${theme.border}`, display: "block" }} />
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <button type="button" onClick={() => serialModalCoverRef.current?.click()} disabled={serialModalCoverUploading}
+                            style={{ padding: "5px 12px", borderRadius: 5, border: `1px solid ${theme.border}`, background: "transparent", color: theme.muted, fontSize: 12, fontFamily: SPURF, cursor: "pointer" }}>
+                            {serialModalCoverUploading ? "Uploading…" : "Replace"}
+                          </button>
+                          <button type="button" onClick={() => setSerialModalCover(null)}
+                            style={{ padding: "5px 12px", borderRadius: 5, border: `1px solid ${theme.red}44`, background: theme.redDim, color: theme.red, fontSize: 12, fontFamily: SPURF, cursor: "pointer" }}>
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button type="button" onClick={() => serialModalCoverRef.current?.click()} disabled={serialModalCoverUploading}
+                        style={{ padding: "7px 14px", borderRadius: 6, border: `1px solid ${theme.border}`, background: "transparent", color: theme.muted, fontSize: 13, fontFamily: SPURF, cursor: "pointer" }}>
+                        {serialModalCoverUploading ? "Uploading…" : "Upload Cover"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {serialModalError && (
+                  <div style={{ marginTop: 16, padding: "10px 14px", background: theme.redDim, border: `1px solid ${theme.red}40`, borderRadius: 7, fontSize: 13, color: theme.red, fontFamily: SPURF }}>
+                    {serialModalError}
+                  </div>
+                )}
+
+                <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 24 }}>
+                  <button type="button" onClick={() => setSerialModalOpen(false)}
+                    style={{ padding: "9px 18px", borderRadius: 7, border: `1px solid ${theme.border}`, background: "transparent", color: theme.muted, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: SPURF }}>
+                    Cancel
+                  </button>
+                  <button type="button" onClick={handleCreateSerial} disabled={serialModalSaving || !serialModalTitle.trim()}
+                    style={{ padding: "9px 20px", borderRadius: 7, border: "none", background: serialModalTitle.trim() ? theme.accent : theme.border, color: serialModalTitle.trim() ? "#fff" : theme.dim, fontSize: 13, fontWeight: 700, cursor: serialModalTitle.trim() ? "pointer" : "default", fontFamily: SPURF, transition: "background 0.12s" }}>
+                    {serialModalSaving ? "Creating…" : "Create Serial"}
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Category create modal */}
+          {categoryModalOpen && (
+            <>
+              <div onClick={() => setCategoryModalOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(3px)" }} />
+              <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)", zIndex: 201, width: 400, background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: 28, boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: theme.dim, letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: SPURM, marginBottom: 20 }}>New Category</div>
+
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: theme.dim, fontFamily: SPURM, fontWeight: 500, marginBottom: 5 }}>Name</div>
+                  <input value={categoryModalName} onChange={e => setCategoryModalName(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && handleCreateCategory()}
+                    placeholder="Category name…" autoFocus
+                    style={{ width: "100%", background: "transparent", border: "none", borderBottom: `1px solid ${theme.border}`, outline: "none", padding: "6px 0", fontSize: 16, fontWeight: 600, color: theme.text, fontFamily: SPURF }} />
+                </div>
+
+                {categoryModalError && (
+                  <div style={{ marginBottom: 16, padding: "10px 14px", background: theme.redDim, border: `1px solid ${theme.red}40`, borderRadius: 7, fontSize: 13, color: theme.red, fontFamily: SPURF }}>
+                    {categoryModalError}
+                  </div>
+                )}
+
+                <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                  <button type="button" onClick={() => setCategoryModalOpen(false)}
+                    style={{ padding: "9px 18px", borderRadius: 7, border: `1px solid ${theme.border}`, background: "transparent", color: theme.muted, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: SPURF }}>
+                    Cancel
+                  </button>
+                  <button type="button" onClick={handleCreateCategory} disabled={categoryModalSaving || !categoryModalName.trim()}
+                    style={{ padding: "9px 20px", borderRadius: 7, border: "none", background: categoryModalName.trim() ? theme.accent : theme.border, color: categoryModalName.trim() ? "#fff" : theme.dim, fontSize: 13, fontWeight: 700, cursor: categoryModalName.trim() ? "pointer" : "default", fontFamily: SPURF, transition: "background 0.12s" }}>
+                    {categoryModalSaving ? "Creating…" : "Create Category"}
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
 
           {/* Editor canvas */}
           <div style={{ background: canvasBg, border: `1px solid ${canvasBorder}`, borderTop: "none", borderRadius: "0 0 10px 10px" }}>

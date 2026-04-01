@@ -391,8 +391,8 @@ button { font-family: var(--font-ui); cursor: pointer; border: none; background:
 }
 
 .floating-time__circle {
-  width: 32px;
-  height: 32px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
   background: var(--color-muted);
   display: flex;
@@ -407,7 +407,7 @@ button { font-family: var(--font-ui); cursor: pointer; border: none; background:
   font-weight: 400;
   color: #ffffff;
   line-height: 1;
-  letter-spacing: -0.2em;
+  letter-spacing: -0.1em;
 }
 
 .floating-nav {

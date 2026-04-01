@@ -261,6 +261,73 @@ export default function BlogPost({ data, darkMode, onNavigate, onAuthRequired }:
             </div>
           </div>
 
+          {data.serial && post.serial_index !== null && (
+            <button
+              type="button"
+              onClick={() => {
+                if (data.serial?.slug) onNavigate(`/blog/serial/${data.serial.slug}`)
+              }}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '0',
+                marginTop: 0,
+                marginBottom: 14,
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--color-accent)',
+                fontSize: 13,
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
+              title={`View series: ${data.serial.title}`}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  minWidth: 0,
+                  overflow: 'hidden',
+                }}
+              >
+                <span
+                  style={{
+                    fontWeight: 600,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {data.serial.title}
+                </span>
+                <span style={{ opacity: 0.6, flexShrink: 0 }}>·</span>
+                <span style={{ flexShrink: 0 }}>
+                  {data.serial.unit_label} {post.serial_index + 1}
+                </span>
+                <span style={{ opacity: 0.6, flexShrink: 0 }}>·</span>
+                <span style={{ opacity: 0.7, flexShrink: 0 }}>
+                  {data.serial.status.charAt(0).toUpperCase() + data.serial.status.slice(1)}
+                </span>
+              </div>
+
+              <span
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 11,
+                  color: 'var(--color-dim)',
+                  whiteSpace: 'nowrap',
+                  marginLeft: 12,
+                  flexShrink: 0,
+                }}
+              >
+                part of a series
+              </span>
+            </button>
+          )}
+
           <hr className="blog-post-header__divider" />
         </header>
 
@@ -449,6 +516,73 @@ export default function BlogPost({ data, darkMode, onNavigate, onAuthRequired }:
             {author.bio && <span className="author-block__bio">{author.bio}</span>}
           </div>
         </div>
+
+        {data.serial && post.serial_index !== null && (
+          <button
+            type="button"
+            onClick={() => {
+              if (data.serial?.slug) onNavigate(`/blog/serial/${data.serial.slug}`)
+            }}
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '0',
+              marginTop: 14,
+              marginBottom: 0,
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--color-accent)',
+              fontSize: 13,
+              cursor: 'pointer',
+              textAlign: 'left',
+            }}
+            title={`View series: ${data.serial.title}`}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                minWidth: 0,
+                overflow: 'hidden',
+              }}
+            >
+              <span
+                style={{
+                  fontWeight: 600,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {data.serial.title}
+              </span>
+              <span style={{ opacity: 0.6, flexShrink: 0 }}>·</span>
+              <span style={{ flexShrink: 0 }}>
+                {data.serial.unit_label} {post.serial_index + 1}
+              </span>
+              <span style={{ opacity: 0.6, flexShrink: 0 }}>·</span>
+              <span style={{ opacity: 0.7, flexShrink: 0 }}>
+                {data.serial.status.charAt(0).toUpperCase() + data.serial.status.slice(1)}
+              </span>
+            </div>
+
+            <span
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                color: 'var(--color-dim)',
+                whiteSpace: 'nowrap',
+                marginLeft: 12,
+                flexShrink: 0,
+              }}
+            >
+              part of a series
+            </span>
+          </button>
+        )}
 
         {morePosts.length > 0 && (
           <div className="more-posts">

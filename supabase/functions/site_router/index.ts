@@ -144,7 +144,6 @@ Deno.serve(async (req) => {
       last_published_at: lastPublishedMap[p.id] ?? null,
     }))
     .sort((a: any, b: any) => {
-      // Owner first, then by last published desc
       if (a.id === site.owner_id) return -1
       if (b.id === site.owner_id) return 1
       if (!a.last_published_at) return 1
@@ -168,7 +167,8 @@ Deno.serve(async (req) => {
         .from('spur_posts')
         .select(
           'id, site_id, author_id, category_id, discovery_category_id, is_in_discovery, title, slug, excerpt, content, thumbnail_url, ' +
-          'status, tags, content_meta, published_at, created_at, updated_at'
+          'status, tags, content_meta, published_at, created_at, updated_at, ' +
+          'serial_id, serial_index, is_serial'
         )
         .eq('site_id', site.id)
         .eq('status', 'published')
@@ -223,6 +223,7 @@ Deno.serve(async (req) => {
         ])
       )
     }
+
     const postIds = postList.map((p: any) => p.id)
     const { counts, liked } = postIds.length
       ? await getLikesForEntities(supabase, 'spur_post', postIds, userId)
@@ -232,12 +233,26 @@ Deno.serve(async (req) => {
       ? await getCommentCountsForEntities(supabase, 'spur_post', postIds)
       : {}
 
+    // ── Attach serial summaries to posts ──────────────────────
+    const serialIds = [...new Set(postList.map((p: any) => p.serial_id).filter(Boolean))]
+    let serialMap: Record<string, any> = {}
+
+    if (serialIds.length) {
+      const { data: serialRows } = await supabase
+        .from('spur_serials')
+        .select('id, title, slug, unit_label, status')
+        .in('id', serialIds)
+
+      serialMap = Object.fromEntries((serialRows ?? []).map((s: any) => [s.id, s]))
+    }
+
     const postsWithLikes = postList.map((p: any) => ({
       ...p,
       like_count: counts[p.id] ?? 0,
       user_liked: liked[p.id] ?? false,
       comment_count: commentCounts[p.id] ?? 0,
       discovery: p.discovery_category_id ? discoveryMap[p.discovery_category_id] ?? null : null,
+      serial: p.serial_id ? serialMap[p.serial_id] ?? null : null,
     }))
 
     return json({
@@ -249,6 +264,35 @@ Deno.serve(async (req) => {
     })
   }
 
+  // ── Route: /serial/:slug ──────────────────────────────────────
+  const serialSlugMatch = path.match(/^\/blog\/serial\/([^/]+)\/?$/)
+  if (serialSlugMatch) {
+    const slug = serialSlugMatch[1]
+
+    const { data: serial } = await supabase
+      .from('spur_serials')
+      .select('id, title, slug, tagline, description, cover_image_url, unit_label, status, created_at, updated_at')
+      .eq('site_id', site.id)
+      .eq('slug', slug)
+      .maybeSingle()
+
+    if (!serial) return json({ type: 'not_found' })
+
+    const { data: chapters } = await supabase
+      .from('spur_posts')
+      .select('id, slug, title, content, serial_index, published_at, excerpt')
+      .eq('serial_id', serial.id)
+      .eq('status', 'published')
+      .order('serial_index', { ascending: true })
+
+    return json({
+      type: 'serial_page',
+      site,
+      serial,
+      chapters: chapters ?? [],
+    })
+  }
+
   // ── Route: /blog/:slug ────────────────────────────────────────
   const blogSlugMatch = path.match(/^\/blog\/([^/]+)\/?$/)
   if (blogSlugMatch) {
@@ -257,13 +301,19 @@ Deno.serve(async (req) => {
       .from('spur_posts')
       .select(
         'id, site_id, author_id, category_id, discovery_category_id, is_in_discovery, title, slug, excerpt, content, thumbnail_url, ' +
-        'status, tags, content_meta, published_at, created_at, updated_at'
+        'status, tags, content_meta, published_at, created_at, updated_at, ' +
+        'serial_id, serial_index, is_serial'
       )
       .eq('site_id', site.id)
       .eq('slug', slug)
       .maybeSingle()
 
     if (!post) return json({ type: 'not_found' })
+
+    let serial = null
+    let toc = null
+    let prev = null
+    let next = null
 
     let discovery = null
 
@@ -294,6 +344,44 @@ Deno.serve(async (req) => {
       }
     }
 
+    if (post.serial_id) {
+      const { data: serialRow } = await supabase
+        .from('spur_serials')
+        .select('id, title, slug, description, cover_image_url, unit_label, status')
+        .eq('id', post.serial_id)
+        .maybeSingle()
+
+      serial = serialRow ?? null
+
+      const { data: chapters } = await supabase
+        .from('spur_posts')
+        .select('id, title, slug, serial_index, published_at')
+        .eq('serial_id', post.serial_id)
+        .eq('status', 'published')
+        .order('serial_index', { ascending: true })
+
+      toc = chapters ?? []
+
+      if (post.serial_index != null) {
+        const { data: prevRow } = await supabase
+          .from('spur_posts')
+          .select('slug')
+          .eq('serial_id', post.serial_id)
+          .eq('serial_index', post.serial_index - 1)
+          .maybeSingle()
+
+        const { data: nextRow } = await supabase
+          .from('spur_posts')
+          .select('slug')
+          .eq('serial_id', post.serial_id)
+          .eq('serial_index', post.serial_index + 1)
+          .maybeSingle()
+
+        prev = prevRow ?? null
+        next = nextRow ?? null
+      }
+    }
+
     // Fetch post author
     let postAuthor = safeAuthor
     if (post.author_id !== site.owner_id) {
@@ -317,7 +405,16 @@ Deno.serve(async (req) => {
       discovery,
     }
 
-    return json({ type: 'blog_post', site, post: postWithLikes, author: postAuthor })
+    return json({
+      type: 'blog_post',
+      site,
+      post: postWithLikes,
+      author: postAuthor,
+      serial,
+      toc,
+      prev,
+      next,
+    })
   }
 
   // ── Fallback ──────────────────────────────────────────────────

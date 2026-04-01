@@ -6,6 +6,7 @@ import SiteHeader from './components/SiteHeader'
 import SiteFooter from './components/SiteFooter'
 import BlogIndex from './pages/BlogIndex'
 import BlogPost from './pages/BlogPost'
+import SerialPage from './pages/SerialPage'
 import NotFound from './pages/NotFound'
 import { getSupabase } from './supabase'
 
@@ -88,6 +89,11 @@ function App() {
     return () => { cancelled = true }
   }, [path])
 
+  const devNavigate = (path: string) => {
+    const sub = new URLSearchParams(window.location.search).get('sub')
+    navigate(sub ? `${path}?sub=${sub}` : path)
+  }
+
   const renderPage = () => {
     if (loading) return (
       <div className="state-loading">
@@ -103,8 +109,9 @@ function App() {
     )
     if (!data) return null
     switch (data.type) {
-      case 'blog_index': return <BlogIndex data={data} onNavigate={navigate} darkMode={darkMode} onPrefetch={prefetchRoute} />
-      case 'blog_post':  return <BlogPost data={data} onNavigate={navigate} darkMode={darkMode} onAuthRequired={() => setShowAuth(true)} />
+      case 'blog_index': return <BlogIndex data={data} onNavigate={devNavigate} darkMode={darkMode} onPrefetch={prefetchRoute} />
+      case 'blog_post':  return <BlogPost data={data} onNavigate={devNavigate} darkMode={darkMode} onAuthRequired={() => setShowAuth(true)} />
+      case 'serial_page': return <SerialPage data={data} onNavigate={devNavigate} darkMode={darkMode} />
       case 'not_found':
       default:           return <NotFound />
     }

@@ -299,6 +299,7 @@ export default function BlogIndex({ data, darkMode, onNavigate, onPrefetch }: Pr
                 onClick={() => onNavigate(`/blog/${post.slug}`)}
                 onHover={() => onPrefetch(`/blog/${post.slug}`)}
                 onDiscoveryClick={(slug) => onNavigate(`/discover/${slug}`)}
+                onSerialClick={(slug) => onNavigate(`/blog/serial/${slug}`)}
               />
             ))}
           </div>
@@ -313,6 +314,7 @@ export default function BlogIndex({ data, darkMode, onNavigate, onPrefetch }: Pr
               darkMode={darkMode}
               onClick={() => onNavigate(`/blog/${post.slug}`)}
               onHover={() => onPrefetch(`/blog/${post.slug}`)}
+              onSerialClick={(slug) => onNavigate(`/blog/serial/${slug}`)}
             />
           ))}
         </div>

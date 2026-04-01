@@ -11,6 +11,7 @@ interface Props {
   onClick: () => void
   onHover?: () => void
   onDiscoveryClick?: (slug: string) => void
+  onSerialClick?: (slug: string) => void
 }
 
 const META_COLORS: Record<string, string> = {
@@ -34,7 +35,8 @@ export default function PostList({
   darkMode,
   onClick,
   onHover,
-  onDiscoveryClick
+  onDiscoveryClick,
+  onSerialClick,
 }: Props) {
   const [hovered, setHovered] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
@@ -53,6 +55,73 @@ export default function PostList({
       k.replace('has_', '').replace('images', 'image').replace('links', 'link')
     )
     .filter(k => META_COLORS[k])
+
+  const serialRow = post.serial && post.serial_index !== null && (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation()
+        if (onSerialClick && post.serial?.slug) onSerialClick(post.serial.slug)
+      }}
+      style={{
+        width: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: 0,
+        background: 'transparent',
+        border: 'none',
+        color: 'var(--color-accent)',
+        fontSize: 12,
+        cursor: 'pointer',
+        textAlign: 'left',
+        margin: '2px 0 2px',
+      }}
+      title={`View series: ${post.serial.title}`}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          minWidth: 0,
+          overflow: 'hidden',
+        }}
+      >
+        <span
+          style={{
+            fontWeight: 600,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {post.serial.title}
+        </span>
+        <span style={{ opacity: 0.6, flexShrink: 0 }}>·</span>
+        <span style={{ flexShrink: 0 }}>
+          {post.serial.unit_label} {post.serial_index + 1}
+        </span>
+        <span style={{ opacity: 0.6, flexShrink: 0 }}>·</span>
+        <span style={{ opacity: 0.7, flexShrink: 0 }}>
+          {post.serial.status.charAt(0).toUpperCase() + post.serial.status.slice(1)}
+        </span>
+      </div>
+
+      <span
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11,
+          color: 'var(--color-dim)',
+          whiteSpace: 'nowrap',
+          marginLeft: 12,
+          flexShrink: 0,
+        }}
+      >
+        part of a series
+      </span>
+    </button>
+  )
 
   useEffect(() => {
     getSupabase().auth.getSession().then(({ data: { session } }: any) => {
@@ -132,6 +201,7 @@ export default function PostList({
           gap: 10,
         }}
       >
+        {serialRow}
         <div
           style={{
             display: 'grid',
@@ -343,7 +413,13 @@ export default function PostList({
       onMouseEnter={() => { setHovered(true); onHover?.() }}
       onMouseLeave={() => setHovered(false)}
     >
-      <div className="post-list-item__thumb" style={{ position: 'relative' }}>
+      <div
+        className="post-list-item__thumb"
+        style={{
+          position: 'relative',
+          alignSelf: 'center',
+        }}
+      >
         {discoveryButton}
 
         {thumb
@@ -424,6 +500,14 @@ export default function PostList({
       </div>
 
       <div className="post-list-item__content">
+        {serialRow}
+
+        <h2 className="post-list-item__title">{post.title}</h2>
+
+        {post.excerpt && (
+          <p className="post-list-item__excerpt">{post.excerpt}</p>
+        )}
+
         <div className="post-list-item__top post-list-item__top--desktop">
           {post.tags && post.tags.length > 0 && (
             <div className="post-list-item__tags">
@@ -448,12 +532,6 @@ export default function PostList({
             </div>
           )}
         </div>
-
-        <h2 className="post-list-item__title">{post.title}</h2>
-
-        {post.excerpt && (
-          <p className="post-list-item__excerpt">{post.excerpt}</p>
-        )}
 
         <div className="post-list-item__footer post-list-item__footer--desktop">
           <div className="post-list-item__footer-left">

@@ -11,6 +11,7 @@ interface Props {
   onClick: () => void
   onHover?: () => void
   onDiscoveryClick?: (slug: string) => void
+  onSerialClick?: (slug: string) => void
 }
 
 const META_COLORS: Record<string, string> = {
@@ -34,7 +35,8 @@ export default function PostCard({
   darkMode,
   onClick,
   onHover,
-  onDiscoveryClick
+  onDiscoveryClick,
+  onSerialClick,
 }: Props) {
   const [hovered, setHovered] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
@@ -53,6 +55,8 @@ export default function PostCard({
     )
     .filter(k => META_COLORS[k])
 
+  const serial = post.serial ?? null
+
   useEffect(() => {
     getSupabase().auth.getSession().then(({ data: { session } }: any) => {
       setUserId(session?.user?.id ?? null)
@@ -66,6 +70,53 @@ export default function PostCard({
       onMouseEnter={() => { setHovered(true); onHover?.() }}
       onMouseLeave={() => setHovered(false)}
     >
+      {serial && post.serial_index !== null && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            if (onSerialClick && serial.slug) onSerialClick(serial.slug)
+          }}
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '8px 12px',
+            background: 'transparent',
+            border: 'none',
+            borderBottom: '1px solid var(--color-border-light)',
+            color: 'var(--color-accent)',
+            fontSize: 12,
+            cursor: 'pointer',
+          }}
+          title={`View series: ${serial.title}`}
+        >
+          {/* LEFT SIDE */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontWeight: 600 }}>{serial.title}</span>
+            <span style={{ opacity: 0.6 }}>·</span>
+            <span>{serial.unit_label} {post.serial_index + 1}</span>
+            <span style={{ opacity: 0.6 }}>·</span>
+            <span style={{ opacity: 0.7 }}>
+              {serial.status.charAt(0).toUpperCase() + serial.status.slice(1)}
+            </span>
+          </div>
+
+          {/* RIGHT SIDE */}
+          <span
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              color: 'var(--color-dim)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            part of a series
+          </span>
+        </button>
+      )}
+
       <div className="post-card__thumb">
         {!!(post as any).discovery_category_id && (
           <button
@@ -187,6 +238,7 @@ export default function PostCard({
             )}
           </div>
         </div>
+
       </div>
     </article>
   )

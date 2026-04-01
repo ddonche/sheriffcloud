@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react"
-import type { SpurPost, SpurFeature } from "./spurTypes"
+import type { SpurPost, SpurFeature, SpurSerial } from "./spurTypes"
 import { SPUR_DARK, SPUR_LIGHT, SPURF, SPURM } from "./spurTheme"
 import { SpurPostCard } from "./SpurPostCard"
 import { SpurPostEditor } from "./SpurPostEditor"
 import { SpurCategoriesPanel } from "./SpurCategoriesPanel"
+import { SpurSerialsPanel } from "./SpurSerialsPanel"
 
 type Site = {
   id: string
@@ -23,11 +24,12 @@ type SpurAuthorPerms = {
   can_schedule: boolean
 }
 
-const NAV_FEATURES: { key: SpurFeature; label: string }[] = [
-  { key: "posts",      label: "Posts"      },
+const NAV_FEATURES = [
+  { key: "posts", label: "Posts" },
+  { key: "serials", label: "Serials" },
   { key: "categories", label: "Categories" },
-  { key: "writers",    label: "Writers"    },
-  { key: "settings",   label: "Settings"   },
+  { key: "writers", label: "Writers" },
+  { key: "settings", label: "Settings" },
 ]
 
 export function SpurPanel({ site, userId, supabase }: { site: Site; userId: string; supabase: any }) {
@@ -36,6 +38,8 @@ export function SpurPanel({ site, userId, supabase }: { site: Site; userId: stri
   const [activeSiteId, setActiveSiteId] = useState(site.id)
   const [feature, setFeature] = useState<SpurFeature>("posts")
   const [posts, setPosts] = useState<SpurPost[]>([])
+  const [serials, setSerials] = useState<SpurSerial[]>([])
+  const [serialsLoading, setSerialsLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<"all" | "published" | "draft" | "scheduled">("all")
   const [editingPost, setEditingPost] = useState<SpurPost | null | "new">(null)
@@ -102,7 +106,10 @@ export function SpurPanel({ site, userId, supabase }: { site: Site; userId: stri
     })()
   }, [supabase, userId])
 
-  useEffect(() => { loadPosts() }, [activeSiteId])
+  useEffect(() => {
+    loadPosts()
+    loadSerials()
+  }, [activeSiteId])
 
   useEffect(() => {
     if (!isOwner && feature !== "posts") {
@@ -132,6 +139,24 @@ export function SpurPanel({ site, userId, supabase }: { site: Site; userId: stri
     const { data } = await query
     setPosts(data ?? [])
     setLoading(false)
+  }
+
+  async function loadSerials() {
+    setSerialsLoading(true)
+
+    let query = supabase
+      .from("spur_serials")
+      .select("*")
+      .eq("site_id", activeSiteId)
+      .order("updated_at", { ascending: false })
+
+    if (!isOwner) {
+      query = query.eq("author_id", userId)
+    }
+
+    const { data } = await query
+    setSerials(data ?? [])
+    setSerialsLoading(false)
   }
 
   function handleSaved(saved: SpurPost) {
@@ -181,7 +206,7 @@ export function SpurPanel({ site, userId, supabase }: { site: Site; userId: stri
           {visibleFeatures.map(({ key, label }) => {
             const active = feature === key
             return (
-              <button key={key} onClick={() => { setFeature(key); setEditingPost(null) }}
+              <button key={key} onClick={() => { setFeature(key as SpurFeature); setEditingPost(null) }}
                 style={{ padding: "9px 14px", border: `1px solid ${active ? theme.border : "transparent"}`, borderRadius: 4, background: active ? theme.borderLight : "transparent", color: active ? theme.text : theme.muted, fontSize: 13, fontWeight: active ? 600 : 500, cursor: "pointer", fontFamily: SPURF, transition: "all 0.12s ease", whiteSpace: "nowrap" }}
                 onMouseEnter={e => { if (!active) { e.currentTarget.style.color = theme.text; e.currentTarget.style.background = theme.borderLight } }}
                 onMouseLeave={e => { if (!active) { e.currentTarget.style.color = theme.muted; e.currentTarget.style.background = "transparent" } }}>
@@ -294,6 +319,19 @@ export function SpurPanel({ site, userId, supabase }: { site: Site; userId: stri
     }
     if (feature === "categories") {
       return <SpurCategoriesPanel siteId={activeSiteId} supabase={supabase} theme={theme} />
+    }
+    if (feature === "serials") {
+      return (
+        <SpurSerialsPanel
+          siteId={activeSiteId}
+          userId={userId}
+          supabase={supabase}
+          theme={theme}
+          serials={serials}
+          loading={serialsLoading}
+          onChanged={loadSerials}
+        />
+      )
     }
     return (
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 300, gap: 8 }}>

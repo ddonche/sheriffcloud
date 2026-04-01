@@ -82,7 +82,7 @@ type NavSelection =
 const FONT = `system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`
 
 const APP_META: Record<AppKey, { label: string; color: string }> = {
-  spur:  { label: "Spur",  color: "#b45309" },
+  spur:  { label: "Blog",  color: "#b45309" },
   docs:  { label: "Docs",  color: "#0e7490" },
   forum: { label: "Forum", color: "#7c3aed" },
 }
