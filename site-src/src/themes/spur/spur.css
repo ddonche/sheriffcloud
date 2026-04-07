@@ -593,6 +593,44 @@ button { font-family: var(--font-ui); cursor: pointer; border: none; background:
 }
 
 /* ── Auth modal overlay ──────────────────────────────────────── */
+.auth-modal__oauth-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+  margin-bottom: 0;
+}
+.auth-modal__oauth-btn:hover {
+  background: var(--color-border-light);
+  border-color: var(--color-border);
+}
+
+.auth-modal__divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-muted);
+  font-size: 12px;
+  margin: 0;
+}
+.auth-modal__divider::before,
+.auth-modal__divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--color-border-light);
+}
+
 .auth-overlay {
   position: fixed;
   inset: 0;

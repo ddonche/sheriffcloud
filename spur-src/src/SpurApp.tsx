@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react"
-import { BrowserRouter, Routes, Route } from "react-router-dom"
+import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom"
 import { supabase } from "./supabase"
 import { AuthModal } from "./AuthModal"
 import PricingPage from "./PricingPage"
 import SpurHeader from "./SpurHeader"
 import { Icon } from "./Icons"
+import { SpurPanel } from "./spur/SpurPanel"
+import CreateBlogModal from "./CreateBlogModal"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -389,11 +391,19 @@ function PostCard({ post, featured = false }: { post: SpurPost; featured?: boole
 function HomePage({
   posts,
   session,
-  onLogin,
+  onStartWriting,
+  onNewPost,
+  onNewBlog,
+  onDashboard,
+  canCreateBlog,
 }: {
   posts: SpurPost[]
   session: any
-  onLogin: () => void
+  onStartWriting: () => void
+  onNewPost: () => void
+  onNewBlog: () => void
+  onDashboard: () => void
+  canCreateBlog: boolean
 }) {
   const [activeFilters, setActiveFilters] = useState<Set<ContentMeta>>(new Set())
 
@@ -422,10 +432,14 @@ function HomePage({
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: FONT }}>
       <SpurHeader
         session={session}
-        onLogin={onLogin}
+        onStartWriting={onStartWriting}
+        onNewPost={onNewPost}
+        onNewBlog={onNewBlog}
+        onDashboard={onDashboard}
         onSignOut={async () => {
           await supabase.auth.signOut()
         }}
+        canCreateBlog={canCreateBlog}
         colors={C}
         font={FONT}
         fontMono={FONT_MONO}
@@ -500,8 +514,9 @@ function HomePage({
             </p>
 
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 22 }}>
-              <a
-                href="https://admin.sheriffcloud.com"
+              <button
+                type="button"
+                onClick={onStartWriting}
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
@@ -512,10 +527,11 @@ function HomePage({
                   padding: "13px 18px",
                   fontSize: 14,
                   fontWeight: 800,
+                  border: "none",
                 }}
               >
                 Start Writing
-              </a>
+              </button>
               <a
                 href="#discover"
                 style={{
@@ -796,8 +812,9 @@ function HomePage({
               </div>
             </div>
 
-            <a
-              href="https://admin.sheriffcloud.com"
+            <button
+              type="button"
+              onClick={onStartWriting}
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -809,10 +826,11 @@ function HomePage({
                 fontSize: 14,
                 fontWeight: 800,
                 whiteSpace: "nowrap",
+                border: "none",
               }}
             >
               Create Your Blog
-            </a>
+            </button>
           </div>
         </section>
       </main>
@@ -820,9 +838,16 @@ function HomePage({
   )
 }
 
-export default function SpurApp() {
+function SpurAppRoutes() {
+  const navigate = useNavigate()
   const [session, setSession] = useState<any>(null)
   const [showAuth, setShowAuth] = useState(false)
+  const [ownedSites, setOwnedSites] = useState<any[]>([])
+  const [loadingSites, setLoadingSites] = useState(false)
+  const [showCreateBlogModal, setShowCreateBlogModal] = useState(false)
+  const [entitlements, setEntitlements] = useState<any | null>(null)
+  const [loadingEntitlements, setLoadingEntitlements] = useState(false)
+  const [continueIntoCreateBlog, setContinueIntoCreateBlog] = useState(false)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null))
@@ -830,9 +855,172 @@ export default function SpurApp() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event: string, nextSession: any) => {
       setSession(nextSession ?? null)
+      if (_event === 'SIGNED_IN') {
+        const returnTo = sessionStorage.getItem('oauth_return_to')
+        if (returnTo) {
+          sessionStorage.removeItem('oauth_return_to')
+          window.location.replace(returnTo)
+        }
+      }
     })
     return () => subscription.unsubscribe()
   }, [])
+
+  useEffect(() => {
+    if (!session?.user?.id) {
+      setOwnedSites([])
+      setShowCreateBlogModal(false)
+      return
+    }
+
+    let cancelled = false
+
+    ;(async () => {
+      setLoadingSites(true)
+
+      const { data, error } = await supabase
+        .from("sites")
+        .select("*")
+        .eq("owner_id", session.user.id)
+        .order("created_at", { ascending: false })
+
+      if (cancelled) return
+
+      if (error) {
+        console.error(error)
+        setOwnedSites([])
+        setShowCreateBlogModal(false)
+        setLoadingSites(false)
+        return
+      }
+
+      const sites = data ?? []
+      setOwnedSites(sites)
+      setLoadingSites(false)
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [session, entitlements])
+
+  useEffect(() => {
+    if (!session?.user?.id) {
+      setEntitlements(null)
+      return
+    }
+
+    let cancelled = false
+
+    ;(async () => {
+      setLoadingEntitlements(true)
+
+      const { data, error } = await supabase
+        .from("account_entitlements")
+        .select("*")
+        .eq("user_id", session.user.id)
+        .single()
+
+      if (cancelled) return
+
+      if (error) {
+        console.error(error)
+        setEntitlements(null)
+        setLoadingEntitlements(false)
+        return
+      }
+
+      setEntitlements(data)
+      setLoadingEntitlements(false)
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [session])
+
+  useEffect(() => {
+    if (!continueIntoCreateBlog) return
+    if (!session?.user?.id) return
+    if (loadingSites || loadingEntitlements) return
+
+    const siteLimit = entitlements?.site_limit ?? 3
+    const canCreate = ownedSites.length < siteLimit
+
+    if (ownedSites.length === 0 && canCreate) {
+      setShowCreateBlogModal(true)
+    }
+
+    setContinueIntoCreateBlog(false)
+  }, [
+    continueIntoCreateBlog,
+    session,
+    ownedSites,
+    entitlements,
+    loadingSites,
+    loadingEntitlements,
+  ])
+
+  useEffect(() => {
+    function handleOpenAuth() {
+      setShowAuth(true)
+    }
+
+    window.addEventListener("spur:open-auth", handleOpenAuth)
+    return () => window.removeEventListener("spur:open-auth", handleOpenAuth)
+  }, [])
+
+  function handleStartWriting() {
+    if (!session) {
+      setContinueIntoCreateBlog(true)
+      setShowAuth(true)
+      return
+    }
+
+    if (loadingSites || loadingEntitlements) return
+
+    const siteLimit = entitlements?.site_limit ?? 3
+    const canCreate = ownedSites.length < siteLimit
+
+    if (!canCreate) {
+      alert(`You’ve reached your limit of ${siteLimit} sites.`)
+      return
+    }
+
+    if (ownedSites.length === 0) {
+      setShowCreateBlogModal(true)
+      return
+    }
+
+    navigate("/dashboard")
+  }
+
+  function handleNewPost() {
+    if (!session) {
+      setContinueIntoCreateBlog(true)
+      setShowAuth(true)
+      return
+    }
+
+    if (loadingSites || loadingEntitlements) return
+
+    const siteLimit = entitlements?.site_limit ?? 3
+    const canCreate = ownedSites.length < siteLimit
+
+    if (ownedSites.length === 0) {
+      if (!canCreate) {
+        alert(`You’ve reached your limit of ${siteLimit} sites.`)
+        return
+      }
+
+      setShowCreateBlogModal(true)
+      return
+    }
+
+    navigate("/dashboard")
+  }
+
+  const primarySite = ownedSites[0] ?? null
 
   return (
     <>
@@ -854,34 +1042,234 @@ export default function SpurApp() {
         }
       `}</style>
 
-      <BrowserRouter>
-        <Routes>
-          <Route
-            path="/"
-            element={<HomePage posts={MOCK_POSTS} session={session} onLogin={() => setShowAuth(true)} />}
-          />
-          <Route
-            path="/pricing"
-            element={
-              <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: FONT }}>
-                <SpurHeader
-                  session={session}
-                  onLogin={() => setShowAuth(true)}
-                  onSignOut={async () => {
-                    await supabase.auth.signOut()
-                  }}
-                  colors={C}
-                  font={FONT}
-                  fontMono={FONT_MONO}
-                />
-                <PricingPage />
-              </div>
-            }
-          />
-        </Routes>
-      </BrowserRouter>
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <HomePage
+              posts={MOCK_POSTS}
+              session={session}
+              onStartWriting={handleStartWriting}
+              onNewPost={handleNewPost}
+              onNewBlog={() => setShowCreateBlogModal(true)}
+              onDashboard={() => {
+                navigate("/dashboard")
+              }}
+              canCreateBlog={ownedSites.length < (entitlements?.site_limit ?? 3)}
+            />
+          }
+        />
+        <Route
+          path="/pricing"
+          element={
+            <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: FONT }}>
+              <SpurHeader
+                session={session}
+                onStartWriting={handleStartWriting}
+                onNewPost={handleNewPost}
+                onNewBlog={() => setShowCreateBlogModal(true)}
+                onDashboard={() => {
+                  navigate("/dashboard")
+                }}
+                onSignOut={async () => {
+                  await supabase.auth.signOut()
+                }}
+                canCreateBlog={ownedSites.length < (entitlements?.site_limit ?? 3)}
+                colors={C}
+                font={FONT}
+                fontMono={FONT_MONO}
+              />
+              <PricingPage />
+            </div>
+          }
+        />
+        <Route
+          path="/dashboard"
+          element={
+            <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: FONT }}>
+              <SpurHeader
+                session={session}
+                onStartWriting={handleStartWriting}
+                onNewPost={handleNewPost}
+                onNewBlog={() => setShowCreateBlogModal(true)}
+                onDashboard={() => {
+                  navigate("/dashboard")
+                }}
+                onSignOut={async () => {
+                  await supabase.auth.signOut()
+                }}
+                canCreateBlog={ownedSites.length < (entitlements?.site_limit ?? 3)}
+                colors={C}
+                font={FONT}
+                fontMono={FONT_MONO}
+              />
 
+              {session?.user?.id && primarySite ? (
+                <div style={{ height: "calc(100vh - 76px)" }}>
+                  <SpurPanel site={primarySite} userId={session.user.id} supabase={supabase} />
+                </div>
+              ) : (
+                <div
+                  style={{
+                    minHeight: "calc(100vh - 76px)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: 24,
+                  }}
+                >
+                  <div
+                    style={{
+                      width: "100%",
+                      maxWidth: 680,
+                      borderRadius: 18,
+                      border: `1px solid ${C.borderLight}`,
+                      background: C.surface,
+                      padding: "32px 28px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 14,
+                      textAlign: "center",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 700,
+                        fontFamily: FONT_MONO,
+                        color: C.accent,
+                        letterSpacing: "0.08em",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      Dashboard
+                    </div>
+
+                    <h1
+                      style={{
+                        fontSize: 34,
+                        lineHeight: 1.05,
+                        letterSpacing: "-0.04em",
+                        fontWeight: 900,
+                        color: C.text,
+                      }}
+                    >
+                      {session ? "You don’t have a blog yet." : "Please log in to open your dashboard."}
+                    </h1>
+
+                    <p
+                      style={{
+                        fontSize: 15,
+                        lineHeight: 1.75,
+                        color: C.muted,
+                        maxWidth: 560,
+                        margin: "0 auto",
+                      }}
+                    >
+                      {session
+                        ? "Create your first blog to start publishing posts, organizing categories, and managing everything from your panel."
+                        : "Once you’re logged in, you’ll be able to create a blog and manage your writing from here."}
+                    </p>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "center",
+                        gap: 12,
+                        flexWrap: "wrap",
+                        marginTop: 6,
+                      }}
+                    >
+                      {session ? (
+                        <button
+                          type="button"
+                          onClick={() => setShowCreateBlogModal(true)}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 8,
+                            background: C.accent,
+                            color: "#fff",
+                            borderRadius: 10,
+                            padding: "13px 18px",
+                            fontSize: 14,
+                            fontWeight: 800,
+                            border: "none",
+                          }}
+                        >
+                          Create Your Blog
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setShowAuth(true)}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 8,
+                            background: C.accent,
+                            color: "#fff",
+                            borderRadius: 10,
+                            padding: "13px 18px",
+                            fontSize: 14,
+                            fontWeight: 800,
+                            border: "none",
+                          }}
+                        >
+                          Log In
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          window.location.href = "/"
+                        }}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 8,
+                          background: C.surface,
+                          color: C.text,
+                          border: `1px solid ${C.border}`,
+                          borderRadius: 10,
+                          padding: "13px 18px",
+                          fontSize: 14,
+                          fontWeight: 700,
+                        }}
+                      >
+                        Back Home
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          }
+        />
+      </Routes>
+      
+      {session?.user?.id ? (
+        <CreateBlogModal
+          open={showCreateBlogModal}
+          userId={session.user.id}
+          onClose={() => setShowCreateBlogModal(false)}
+          onCreated={(site) => {
+            setOwnedSites((prev: any[]) => [site, ...prev])
+            setShowCreateBlogModal(false)
+            navigate("/dashboard")
+          }}
+        />
+      ) : null}
       {showAuth ? <AuthModal onClose={() => setShowAuth(false)} /> : null}
     </>
+  )
+}
+
+export default function SpurApp() {
+  return (
+    <BrowserRouter>
+      <SpurAppRoutes />
+    </BrowserRouter>
   )
 }

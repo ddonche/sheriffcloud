@@ -110,6 +110,8 @@ function AiPanel({ supabase }: { supabase: any }) {
   const [mobileTab, setMobileTab] = useState<"chat" | "sessions">("chat")
   const [showScrollTop, setShowScrollTop] = useState(false)
   const [listening, setListening] = useState(false)
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [copiedAll, setCopiedAll] = useState(false)
 
   const [sidebarWidth, setSidebarWidth] = useState(300)
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -127,14 +129,18 @@ function AiPanel({ supabase }: { supabase: any }) {
     if (!SR) { setError("Speech recognition not supported in this browser."); return }
     if (listening) { recognitionRef.current?.stop(); setListening(false); return }
     const rec = new SR()
-    rec.continuous = false; rec.interimResults = false; rec.lang = "en-US"
+    rec.continuous = true
+    rec.interimResults = false
+    rec.lang = "en-US"
     rec.onresult = (e: any) => {
-      const t = Array.from(e.results as any[]).map((r: any) => r[0].transcript).join(" ")
+      const t = Array.from(e.results as any[]).slice(e.resultIndex).map((r: any) => r[0].transcript).join(" ")
       setUserMessage(prev => prev ? prev + " " + t : t)
     }
     rec.onerror = () => setListening(false)
-    rec.onend = () => setListening(false)
-    rec.start(); recognitionRef.current = rec; setListening(true)
+    rec.onend = () => { if (listening) rec.start() }
+    rec.start()
+    recognitionRef.current = rec
+    setListening(true)
   }
 
   async function invoke(fn: string, body: any) {
@@ -244,6 +250,20 @@ function AiPanel({ supabase }: { supabase: any }) {
     await supabase.from("ai_sessions").delete().eq("id", id)
     if (selectedSession?.id === id) setSelectedSession(null)
     await loadSessions()
+  }
+
+  function copyMessage(id: string, content: string) {
+    navigator.clipboard.writeText(content).then(() => {
+      setCopiedId(id)
+      setTimeout(() => setCopiedId(null), 1800)
+    })
+  }
+  function copyAllMessages() {
+    const text = messages.map(m => `[${providerLabel(m.role)}]\n${m.content}`).join("\n\n---\n\n")
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedAll(true)
+      setTimeout(() => setCopiedAll(false), 1800)
+    })
   }
 
   // ── Sidebar ───────────────────────────────────────────────────────────────
@@ -525,7 +545,29 @@ function AiPanel({ supabase }: { supabase: any }) {
                 {mode.label}
               </span>
             )}
-            <div style={{ display: "flex", gap: 6, marginLeft: "auto" }}>
+            <div style={{ display: "flex", gap: 6, marginLeft: "auto", alignItems: "center" }}>
+              {messages.length > 0 && (
+                <button
+                  onClick={copyAllMessages}
+                  title="Copy full chat"
+                  style={{
+                    display: "flex", alignItems: "center", gap: 5,
+                    padding: "5px 10px", borderRadius: 7,
+                    border: `1px solid ${copiedAll ? "#7c3aed" : C.chatBorder}`,
+                    background: copiedAll ? "#7c3aed15" : "transparent",
+                    cursor: "pointer",
+                    color: copiedAll ? C.accent : C.textMuted,
+                    fontSize: 12, fontWeight: 600, fontFamily: FONT,
+                    transition: "all 0.15s",
+                  }}>
+                  {copiedAll ? (
+                    <svg viewBox="0 0 640 640" width={13} height={13} fill="currentColor"><path d="M256 464L80 288L137.4 230.6L256 349.3L502.6 102.6L560 160L256 464z"/></svg>
+                  ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" width={13} height={13} fill="currentColor"><path d="M288 64C252.7 64 224 92.7 224 128L224 384C224 419.3 252.7 448 288 448L480 448C515.3 448 544 419.3 544 384L544 183.4C544 166 536.9 149.3 524.3 137.2L466.6 81.8C454.7 70.4 438.8 64 422.3 64L288 64zM160 192C124.7 192 96 220.7 96 256L96 512C96 547.3 124.7 576 160 576L352 576C387.3 576 416 547.3 416 512L416 496L352 496L352 512L160 512L160 256L176 256L176 192L160 192z"/></svg>
+                  )}
+                  {copiedAll ? "Copied!" : "Copy chat"}
+                </button>
+              )}
               {participants.map(pid => {
                 const p = AI_PROVIDERS.find(x => x.id === pid)
                 return p ? (
@@ -612,18 +654,39 @@ function AiPanel({ supabase }: { supabase: any }) {
                       {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                     </span>
                   </div>
-                  <div style={{
-                    padding: "14px 18px",
-                    background: bubbleBg,
-                    color: bubbleColor,
-                    border: `1px solid ${bubbleBorder}`,
-                    borderRadius,
-                    fontSize: 15, lineHeight: 1.7, whiteSpace: "pre-wrap",
-                    fontFamily: FONT,
-                    boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
-                    userSelect: "contain" as any,
-                  }}>
-                    {m.content}
+                  <div style={{ position: "relative" }}>
+                    <button
+                      onClick={() => copyMessage(m.id, m.content)}
+                      title="Copy message"
+                      style={{
+                        position: "absolute", top: 10, right: 10,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        width: 20, height: 20,
+                        border: "none", background: "none",
+                        cursor: "pointer",
+                        color: copiedId === m.id ? "#7c3aed" : "rgba(128,128,128,0.6)",
+                        padding: 0, zIndex: 1,
+                        transition: "color 0.15s",
+                      }}>
+                      {copiedId === m.id ? (
+                        <svg viewBox="0 0 640 640" width={12} height={12} fill="currentColor"><path d="M256 464L80 288L137.4 230.6L256 349.3L502.6 102.6L560 160L256 464z"/></svg>
+                      ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" width={24} height={24} fill="currentColor"><path d="M288 64C252.7 64 224 92.7 224 128L224 384C224 419.3 252.7 448 288 448L480 448C515.3 448 544 419.3 544 384L544 183.4C544 166 536.9 149.3 524.3 137.2L466.6 81.8C454.7 70.4 438.8 64 422.3 64L288 64zM160 192C124.7 192 96 220.7 96 256L96 512C96 547.3 124.7 576 160 576L352 576C387.3 576 416 547.3 416 512L416 496L352 496L352 512L160 512L160 256L176 256L176 192L160 192z"/></svg>
+                      )}
+                    </button>
+                    <div style={{
+                      padding: "14px 44px 14px 18px",
+                      background: bubbleBg,
+                      color: bubbleColor,
+                      border: `1px solid ${bubbleBorder}`,
+                      borderRadius,
+                      fontSize: 15, lineHeight: 1.7, whiteSpace: "pre-wrap",
+                      fontFamily: FONT,
+                      boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+                      userSelect: "contain" as any,
+                    }}>
+                      {m.content}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -670,29 +733,39 @@ function AiPanel({ supabase }: { supabase: any }) {
           borderTop: `1px solid ${C.chatBorder}`,
         }}>
           <div style={{
-            display: "flex", gap: 10, alignItems: "stretch",
+            display: "flex", gap: 10, alignItems: "flex-end",
             background: C.inputBg, border: `1.5px solid ${C.inputBorder}`,
             borderRadius: 16, padding: "10px 10px 10px 14px",
             boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
           }}>
             <textarea
               value={userMessage}
-              onChange={e => setUserMessage(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addMessage() } }}
-              placeholder={selectedSession ? "Type a message… (Enter to send, Shift+Enter for newline)" : "Select a session to begin"}
-              rows={2}
-              disabled={!selectedSession}
-              style={{
-                flex: 1, border: "none", outline: "none", resize: "vertical",
-                minHeight: 48, maxHeight: 400,
-                fontSize: 15, lineHeight: 1.6, color: C.textPrimary,
-                background: "transparent", fontFamily: FONT, alignSelf: "stretch",
-              }}
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addMessage() } }}
+                placeholder={selectedSession ? "Type a message… (Enter to send, Shift+Enter for newline)" : "Select a session to begin"}
+                rows={1}
+                disabled={!selectedSession}
+                style={{
+                  flex: 1, border: "none", outline: "none", resize: "none",
+                  minHeight: 48, maxHeight: 400, height: "auto", overflowY: "auto",
+                  fontSize: 15, lineHeight: 1.6, color: C.textPrimary,
+                  background: "transparent", fontFamily: FONT, alignSelf: "stretch",
+                }}
+                ref={(el) => {
+                  if (el) {
+                    el.style.height = "auto"
+                    el.style.height = Math.min(el.scrollHeight, 400) + "px"
+                  }
+                }}
+                onChange={e => {
+                  setUserMessage(e.target.value)
+                  e.target.style.height = "auto"
+                  e.target.style.height = Math.min(e.target.scrollHeight, 400) + "px"
+                }}
             />
             {/* Mic */}
             <button onClick={toggleListening} title={listening ? "Stop" : "Voice input"}
               style={{
-                flexShrink: 0, width: 48, borderRadius: 10,
+                flexShrink: 0, width: 48, height: 48, borderRadius: 10,
                 background: listening ? "#fef2f2" : "transparent",
                 border: `1.5px solid ${listening ? "#ef4444" : C.inputBorder}`,
                 cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
@@ -706,7 +779,7 @@ function AiPanel({ supabase }: { supabase: any }) {
             {/* Send */}
             <button onClick={addMessage} disabled={anyRunning || !userMessage.trim() || !selectedSession}
               style={{
-                flexShrink: 0, width: 48, borderRadius: 10,
+                flexShrink: 0, width: 48, height: 48, borderRadius: 10,
                 background: userMessage.trim() && selectedSession && !anyRunning ? C.accent : "#e2e8f0",
                 border: "none", cursor: userMessage.trim() && !anyRunning ? "pointer" : "not-allowed",
                 display: "flex", alignItems: "center", justifyContent: "center",

@@ -16,8 +16,12 @@ type Colors = {
 
 type SpurHeaderProps = {
   session: any
-  onLogin: () => void
+  onStartWriting: () => void
+  onNewPost: () => void
+  onNewBlog: () => void
+  onDashboard: () => void
   onSignOut: () => void
+  canCreateBlog: boolean
   colors: Colors
   font: string
   fontMono: string
@@ -38,8 +42,12 @@ function getSessionInitials(session: any) {
 
 export default function SpurHeader({
   session,
-  onLogin,
+  onStartWriting,
+  onNewPost,
+  onNewBlog,
+  onDashboard,
   onSignOut,
+  canCreateBlog,
   colors,
   font,
   fontMono,
@@ -51,7 +59,6 @@ export default function SpurHeader({
   const [menuOpen, setMenuOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement | null>(null)
 
-  const dashboardHref = "https://admin.sheriffcloud.com"
   const accountLabel = getSessionLabel(session)
   const accountInitials = getSessionInitials(session)
   const onPricing = location.pathname === "/pricing"
@@ -128,22 +135,96 @@ export default function SpurHeader({
             Pricing
           </Link>
 
-          <a
-            href={dashboardHref}
-            style={{
-              fontSize: 14,
-              fontWeight: 700,
-              color: "#fff",
-              background: writeHover ? colors.accentHover : colors.accent,
-              padding: "10px 16px",
-              borderRadius: 9,
-              transition: "background 0.15s ease",
-            }}
-            onMouseEnter={() => setWriteHover(true)}
-            onMouseLeave={() => setWriteHover(false)}
-          >
-            {session ? "Dashboard" : "Start Writing"}
-          </a>
+          {!session ? (
+            <>
+              <button
+                type="button"
+                onClick={onStartWriting}
+                style={{
+                  fontSize: 14,
+                  fontWeight: 700,
+                  color: "#fff",
+                  background: writeHover ? colors.accentHover : colors.accent,
+                  padding: "10px 16px",
+                  borderRadius: 9,
+                  border: "none",
+                  fontFamily: font,
+                }}
+                onMouseEnter={() => setWriteHover(true)}
+                onMouseLeave={() => setWriteHover(false)}
+              >
+                Start Writing
+              </button>
+
+              <button
+                type="button"
+                onClick={onStartWriting}
+                onMouseEnter={() => setLoginHover(true)}
+                onMouseLeave={() => setLoginHover(false)}
+                style={{
+                  fontSize: 14,
+                  fontWeight: 600,
+                  color: loginHover ? colors.text : colors.muted,
+                  padding: "9px 14px",
+                  borderRadius: 9,
+                  border: `1px solid ${loginHover ? colors.border : colors.borderLight}`,
+                  background: loginHover ? colors.surfaceHover : "transparent",
+                  fontFamily: font,
+                }}
+              >
+                Log In
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={onNewPost}
+                style={{
+                  fontSize: 13,
+                  fontWeight: 700,
+                  padding: "8px 12px",
+                  borderRadius: 8,
+                  border: `1px solid ${colors.border}`,
+                  background: colors.surface,
+                  color: colors.text,
+                }}
+              >
+                + New Post
+              </button>
+
+              {canCreateBlog && (
+                <button
+                  onClick={onNewBlog}
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 700,
+                    padding: "8px 12px",
+                    borderRadius: 8,
+                    border: `1px solid ${colors.border}`,
+                    background: colors.surface,
+                    color: colors.text,
+                  }}
+                >
+                  + New Blog
+                </button>
+              )}
+
+              <button
+                onClick={onDashboard}
+                style={{
+                  fontSize: 13,
+                  fontWeight: 700,
+                  padding: "8px 12px",
+                  borderRadius: 8,
+                  border: `1px solid ${colors.border}`,
+                  background: colors.surface,
+                  color: colors.text,
+                }}
+              >
+                Dashboard
+              </button>
+            </>
+          )}
 
           {session ? (
             <div ref={dropdownRef} style={{ position: "relative" }}>
@@ -223,27 +304,7 @@ export default function SpurHeader({
                 </div>
               ) : null}
             </div>
-          ) : (
-            <button
-              type="button"
-              onClick={onLogin}
-              onMouseEnter={() => setLoginHover(true)}
-              onMouseLeave={() => setLoginHover(false)}
-              style={{
-                fontSize: 14,
-                fontWeight: 600,
-                color: loginHover ? colors.text : colors.muted,
-                padding: "9px 14px",
-                borderRadius: 9,
-                border: `1px solid ${loginHover ? colors.border : colors.borderLight}`,
-                background: loginHover ? colors.surfaceHover : "transparent",
-                transition: "all 0.15s ease",
-                fontFamily: font,
-              }}
-            >
-              Log In
-            </button>
-          )}
+          ) : null}
         </nav>
       </div>
     </header>

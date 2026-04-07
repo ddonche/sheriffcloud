@@ -55,6 +55,13 @@ function App() {
       const userId = session?.user?.id ?? null
       if (userId !== prevUserId) {
         prevUserId = userId
+        // Restore the page the user was on before OAuth redirect
+        const returnTo = sessionStorage.getItem('oauth_return_to')
+        if (returnTo && _event === 'SIGNED_IN') {
+          sessionStorage.removeItem('oauth_return_to')
+          window.location.replace(returnTo)
+          return
+        }
         bustRoute(path)
         // Re-fetch silently — stale-while-revalidate, no spinner
         fetchRoute(path, fresh => setData(fresh)).catch(() => {})

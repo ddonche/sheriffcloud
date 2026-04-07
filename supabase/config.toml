@@ -391,3 +391,9 @@ verify_jwt = false
 
 [functions.site_router]
 verify_jwt = false
+
+[functions.create_checkout_session]
+verify_jwt = false 
+
+[functions.stripe_webhook]
+verify_jwt = false 

@@ -197,21 +197,28 @@ async function callClaude(apiKey: string, identity: Speaker, transcript: Message
   const model = Deno.env.get("CLAUDE_MODEL") || "claude-sonnet-4-6"
   const systemText = transcript.find(m => m.role === "system")?.content ?? ""
 
-  const messages = transcript
+  const rawMessages = transcript
     .filter(m => m.role !== "system")
-    .map(m => {
-      if (m.role === "user") {
-        return {
-          role: "user" as const,
-          content: m.content,
-        }
-      }
+    .map(m => ({
+      role: m.role === "user" ? "user" as const : "assistant" as const,
+      content: m.role === "user" ? m.content : `${speakerLabel(m.role as Speaker)}: ${m.content}`,
+    }))
 
-      return {
-        role: "assistant" as const,
-        content: `${speakerLabel(m.role as Speaker)}: ${m.content}`,
-      }
-    })
+  // Merge consecutive same-role messages (same fix as Gemini)
+  const messages: { role: "user" | "assistant"; content: string }[] = []
+  for (const msg of rawMessages) {
+    const last = messages[messages.length - 1]
+    if (last && last.role === msg.role) {
+      last.content += "\n\n" + msg.content
+    } else {
+      messages.push({ ...msg })
+    }
+  }
+
+  // Claude requires the last message to be from the user
+  if (messages.length > 0 && messages[messages.length - 1].role === "assistant") {
+    messages.push({ role: "user", content: "(please continue)" })
+  }
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -224,7 +231,7 @@ async function callClaude(apiKey: string, identity: Speaker, transcript: Message
   })
   const data = await res.json()
   console.log("Claude status:", res.status, JSON.stringify(data).slice(0, 300))
-  if (!res.ok) throw new Error(data?.error?.message ?? "Claude request failed")
+  if (!res.ok) throw new Error(data?.error?.message ?? `Claude request failed — last role: ${messages[messages.length - 1].role}, count: ${messages.length}`)
   const text = data?.content?.[0]?.text
   if (!text) throw new Error("Claude returned no content")
   return text.replace(new RegExp(`^${speakerLabel(identity)}:\\s*`, "i"), "").trim()
