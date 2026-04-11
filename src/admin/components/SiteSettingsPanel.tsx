@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react"
+import { getSiteUrl } from "../../shared/site/getSiteUrl"
 
 type Site = {
   id: string
@@ -7,6 +8,7 @@ type Site = {
   custom_domain: string | null
   owner_id: string
   site_type: "cloud" | "static"
+  site_origin: string
   created_at: string
   logo_url?: string | null
   bio?: string | null
@@ -29,17 +31,6 @@ const APP_META: Record<"spur" | "docs" | "forum", { label: string; color: string
   spur: { label: "Spur", color: "#b45309" },
   docs: { label: "Docs", color: "#0e7490" },
   forum: { label: "Forum", color: "#7c3aed" },
-}
-
-function siteUrl(subdomain: string) {
-  const url = new URL(window.location.origin)
-  if (url.hostname === "admin.localhost") url.hostname = `${subdomain}.localhost`
-  else if (url.hostname.endsWith(".sheriffcloud.com")) url.hostname = `${subdomain}.sheriffcloud.com`
-  else url.hostname = `${subdomain}.${url.hostname}`
-  url.pathname = "/"
-  url.search = ""
-  url.hash = ""
-  return url.toString()
 }
 
 export default function SiteSettingsPanel({
@@ -193,12 +184,12 @@ export default function SiteSettingsPanel({
           <div>
             <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, color: "#111827" }}>{siteName || site.name}</h1>
             <a
-              href={siteUrl(site.subdomain)}
+              href={getSiteUrl(site)}
               target="_blank"
               rel="noopener noreferrer"
               style={{ fontSize: 13, color: "#6b7280", textDecoration: "none", marginTop: 4, display: "block" }}
             >
-              {site.subdomain}.sheriffcloud.com ↗
+              {getSiteUrl(site).replace("https://", "")} ↗
             </a>
           </div>
         </div>

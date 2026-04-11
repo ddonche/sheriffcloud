@@ -391,7 +391,6 @@ function PostCard({ post, featured = false }: { post: SpurPost; featured?: boole
 
 function HomePage({
   posts,
-  session,
   onStartWriting,
   onNewPost,
   onNewBlog,
@@ -399,7 +398,6 @@ function HomePage({
   canCreateBlog,
 }: {
   posts: SpurPost[]
-  session: any
   onStartWriting: () => void
   onNewPost: () => void
   onNewBlog: () => void
@@ -1054,7 +1052,6 @@ function SpurAppRoutes() {
           element={
             <HomePage
               posts={MOCK_POSTS}
-              session={session}
               onStartWriting={handleStartWriting}
               onNewPost={handleNewPost}
               onNewBlog={() => setShowCreateBlogModal(true)}
@@ -1283,6 +1280,7 @@ function SpurAppRoutes() {
               theme={{
                 bg: C.bg,
                 surface: C.surface,
+                surfaceHov: C.surfaceHover,
                 border: C.border,
                 borderLight: C.borderLight,
                 text: C.text,
@@ -1291,6 +1289,10 @@ function SpurAppRoutes() {
                 accent: C.accent,
                 accentHov: C.accentHover,
                 accentDim: C.accentDim,
+                green: C.green,
+                greenDim: C.greenDim,
+                yellow: C.yellow,
+                yellowDim: C.yellowDim,
                 red: "#ff5f56",
                 redDim: "#ff5f5620",
               }}
@@ -1311,7 +1313,6 @@ function SpurAppRoutes() {
           onCreated={(site) => {
             setOwnedSites((prev: any[]) => [site, ...prev])
             setShowCreateBlogModal(false)
-            navigate("/admin")
           }}
         />
       ) : null}

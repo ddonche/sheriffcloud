@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react"
 import { supabase } from "./supabase"
 
 const FONT = `"DM Sans", "Inter", system-ui, sans-serif`
+const SITE_ORIGIN = "spur"
+const SITE_DOMAIN = "spur.ink"
 
 const C = {
   overlay: "rgba(8,14,26,0.82)",
@@ -118,6 +120,7 @@ export default function CreateBlogModal({
           subdomain,
           owner_id: userId,
           site_type: "cloud",
+          site_origin: SITE_ORIGIN,
         })
         .select()
         .single()
@@ -173,7 +176,7 @@ export default function CreateBlogModal({
             <div style={styles.kicker}>Start writing</div>
             <h2 style={styles.title}>Create your blog</h2>
             <p style={styles.subtitle}>
-              Pick a name and subdomain. You can change the look and details later.
+              Pick a name and subdomain. You can add a description, logo, and more in the admin dashboard later.
             </p>
           </div>
 
@@ -211,7 +214,7 @@ export default function CreateBlogModal({
                 placeholder="myblog"
                 style={{ ...styles.input, borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
               />
-              <div style={styles.suffix}>.sheriffcloud.com</div>
+              <div style={styles.suffix}>.{SITE_DOMAIN}</div>
             </div>
 
             {subdomain.length >= 2 ? (

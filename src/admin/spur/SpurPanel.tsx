@@ -5,6 +5,7 @@ import { SpurPostCard } from "./SpurPostCard"
 import { SpurPostEditor } from "./SpurPostEditor"
 import { SpurCategoriesPanel } from "./SpurCategoriesPanel"
 import { SpurSerialsPanel } from "./SpurSerialsPanel"
+import { getSiteUrl } from "../../shared/site/getSiteUrl"
 
 type Site = {
   id: string
@@ -13,6 +14,7 @@ type Site = {
   custom_domain: string | null
   owner_id: string
   site_type: "cloud" | "static"
+  site_origin: string
   created_at: string
 }
 
@@ -188,7 +190,7 @@ export function SpurPanel({ site, userId, supabase }: { site: Site; userId: stri
   const header = (
     <div style={{ flexShrink: 0, background: theme.bg, borderBottom: `1px solid ${theme.borderLight}`, position: "sticky", top: 0, zIndex: 20, backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }}>
       <div style={{ display: "flex", alignItems: "center", padding: "0 24px", height: 76, gap: 20 }}>
-        <a href={activeSite ? `https://${activeSite.subdomain}.sheriffcloud.com` : "#"} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", flexShrink: 0 }}>
+        <a href={activeSite ? getSiteUrl(activeSite) : "#"} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", flexShrink: 0 }}>
           <img src="/spur-logo.png" alt="Spur" style={{ height: 52, width: "auto", display: "block" }} />
         </a>
         {canDraft && (
@@ -237,11 +239,11 @@ export function SpurPanel({ site, userId, supabase }: { site: Site; userId: stri
             )
           })}
           {activeSite && (
-            <a href={`https://${activeSite.subdomain}.sheriffcloud.com`} target="_blank" rel="noopener noreferrer"
+            <a href={getSiteUrl(activeSite)} target="_blank" rel="noopener noreferrer"
               style={{ fontSize: 12, color: theme.dim, textDecoration: "none", fontFamily: SPURM, marginLeft: 2, marginRight: 8, opacity: 0.7, transition: "opacity 0.12s", whiteSpace: "nowrap", flexShrink: 0 }}
               onMouseEnter={e => e.currentTarget.style.opacity = "1"}
               onMouseLeave={e => e.currentTarget.style.opacity = "0.7"}>
-              ↗ {activeSite.subdomain}.sheriffcloud.com
+              ↗ {getSiteUrl(activeSite).replace("https://", "")}
             </a>
           )}
           <div style={{ width: 1, height: 16, background: theme.border, flexShrink: 0, margin: "0 4px" }} />
@@ -310,7 +312,7 @@ export function SpurPanel({ site, userId, supabase }: { site: Site; userId: stri
             <SpurPostCard key={post.id} post={post} theme={theme} darkMode={darkMode}
               onEdit={() => setEditingPost(post)}
               onDelete={e => handleDelete(post, e)}
-              onPreview={e => { e.stopPropagation(); window.open(`https://${activeSite?.subdomain}.sheriffcloud.com/blog/${post.slug}`, "_blank") }}
+              onPreview={e => { e.stopPropagation(); window.open(`${getSiteUrl(activeSite)}/blog/${post.slug}`, "_blank") }}
               deleting={deletingId === post.id}
             />
           ))}

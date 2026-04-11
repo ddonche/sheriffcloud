@@ -43,6 +43,7 @@ type Site = {
   custom_domain: string | null
   owner_id: string
   site_type: "cloud" | "static"
+  site_origin: string
   created_at: string
   logo_url: string | null
   bio: string | null
@@ -708,7 +709,7 @@ export default function App() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden", fontFamily: FONT, background: "#f9fafb" }}>
-      <SiteHeader userEmail={session.user.email} isPaid={(plan?.base_plan ?? "free") !== "free"} onSignOut={signOut} />
+      <SiteHeader userEmail={session.user.email} onSignOut={signOut} />
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         <Sidebar
           ownedSites={ownedSites}

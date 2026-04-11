@@ -4,6 +4,8 @@ import { useAuth } from "../../../shared/auth/useAuth"
 
 type SiteHeaderProps = {
   isPaid?: boolean
+  onOpenAuth?: () => void
+  onCreateSite?: () => void
 }
 
 function Icon({
@@ -82,6 +84,8 @@ function getInitial(userEmail: string | null | undefined) {
 
 export default function SiteHeader({
   isPaid = false,
+  onOpenAuth,
+  onCreateSite,
 }: SiteHeaderProps) {
   const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -347,12 +351,30 @@ export default function SiteHeader({
               </>
             ) : (
               <>
-                <Link to="/admin" className="button button-primary" onClick={closeMenu}>
+                <button
+                  type="button"
+                  className="button button-primary"
+                  onClick={() => {
+                    closeMenu()
+                    if (onCreateSite) {
+                      onCreateSite()
+                      return
+                    }
+                    onOpenAuth?.()
+                  }}
+                >
                   Create Site
-                </Link>
-                <Link to="/admin" className="button button-ghost" onClick={closeMenu}>
+                </button>
+                <button
+                  type="button"
+                  className="button button-ghost"
+                  onClick={() => {
+                    closeMenu()
+                    onOpenAuth?.()
+                  }}
+                >
                   Sign In
-                </Link>
+                </button>
               </>
             )}
           </div>
