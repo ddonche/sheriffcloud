@@ -36,12 +36,8 @@ serve(async (req) => {
 
   let userId: string
   try {
-    const token = authHeader.replace(/^Bearer\s+/i, "")
-    const parts = token.split(".")
-    if (parts.length < 2) throw new Error("Malformed token")
-    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/")
-    const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4)
-    const payload = JSON.parse(atob(padded))
+    const token = authHeader.replace("Bearer ", "")
+    const payload = JSON.parse(atob(token.split(".")[1]))
     userId = payload.sub
     if (!userId) throw new Error("No subject")
   } catch {
@@ -68,32 +64,28 @@ serve(async (req) => {
     return json(403, { ok: false, error: "AI access denied" })
   }
 
-  let body: {
+  let payload: {
     session_id?: string
     content?: string
     pause_session?: boolean
-    attachment_url?: string
-    attachment_type?: string
   }
 
   try {
-    body = await req.json()
+    payload = await req.json()
   } catch {
     return json(400, { ok: false, error: "Invalid JSON body" })
   }
 
-  const sessionId = body.session_id?.trim()
-  const content = (body.content ?? "").trim()
-  const pauseSession = body.pause_session ?? true
-  const attachmentUrl = body.attachment_url?.trim() || null
-  const attachmentType = body.attachment_type?.trim() || null
+  const sessionId = payload.session_id?.trim()
+  const content = (payload.content ?? "").trim()
+  const pauseSession = payload.pause_session ?? true
 
   if (!sessionId) {
     return json(400, { ok: false, error: "session_id is required" })
   }
 
-  if (!content && !attachmentUrl) {
-    return json(400, { ok: false, error: "content or attachment_url is required" })
+  if (!content) {
+    return json(400, { ok: false, error: "content is required" })
   }
 
   const { data: session, error: sessionError } = await supabase
@@ -117,8 +109,6 @@ serve(async (req) => {
       session_id: session.id,
       role: "user",
       content,
-      attachment_url: attachmentUrl,
-      attachment_type: attachmentType,
     })
     .select("*")
     .single()
