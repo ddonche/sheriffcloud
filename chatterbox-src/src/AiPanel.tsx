@@ -5,6 +5,7 @@ type AiMode = "collaborative" | "balanced" | "adversarial" | "decision"
 
 type AiSession = {
   id: string
+  user_id: string
   title: string
   first_speaker: string
   participants: AiProvider[]
@@ -18,6 +19,8 @@ type AiMessage = {
   role: string
   model: string
   content: string
+  attachment_url?: string
+  attachment_type?: string
   created_at: string
 }
 
@@ -113,6 +116,12 @@ function AiPanel({ supabase }: { supabase: any }) {
   const [listening, setListening] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [copiedAll, setCopiedAll] = useState(false)
+
+  // ── Attachment state ──────────────────────────────────────────────────────
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null)
+  const [attachmentPreview, setAttachmentPreview] = useState<string | null>(null)
+  const [attachmentType, setAttachmentType] = useState<"image" | "pdf" | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const [sidebarWidth, setSidebarWidth] = useState(300)
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -256,13 +265,64 @@ function AiPanel({ supabase }: { supabase: any }) {
     await loadSessions()
     if (data.session) await selectSession(data.session)
   }
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 10 * 1024 * 1024) { setError("File must be under 10MB"); return }
+    const isImage = file.type.startsWith("image/")
+    const isPdf = file.type === "application/pdf"
+    if (!isImage && !isPdf) { setError("Only images and PDFs are supported"); return }
+    setAttachmentFile(file)
+    setAttachmentType(isImage ? "image" : "pdf")
+    if (isImage) {
+      const reader = new FileReader()
+      reader.onload = () => setAttachmentPreview(reader.result as string)
+      reader.readAsDataURL(file)
+    } else {
+      setAttachmentPreview(null)
+    }
+    // reset input so same file can be re-selected
+    e.target.value = ""
+  }
+
+  function clearAttachment() {
+    setAttachmentFile(null)
+    setAttachmentPreview(null)
+    setAttachmentType(null)
+  }
+
   async function addMessage() {
-    if (!userMessage.trim() || !selectedSession) return
+    if ((!userMessage.trim() && !attachmentFile) || !selectedSession) return
     setLoading(true); setError(null)
-    const { data, error } = await invoke("add_ai_message", { session_id: selectedSession.id, content: userMessage, pause_session: true })
+
+    let attachmentUrl: string | undefined
+    let attachmentTypeFinal: string | undefined
+
+    if (attachmentFile) {
+      const ext = attachmentFile.name.split(".").pop()
+      const userId = selectedSession.user_id
+      const path = `${userId}/${Date.now()}.${ext}`
+      const { error: uploadError } = await supabase.storage
+        .from("chat-attachments")
+        .upload(path, attachmentFile, { contentType: attachmentFile.type })
+      if (uploadError) { setError(`Upload failed: ${uploadError.message}`); setLoading(false); return }
+      const { data: urlData } = supabase.storage.from("chat-attachments").getPublicUrl(path)
+      attachmentUrl = urlData.publicUrl
+      attachmentTypeFinal = attachmentType ?? undefined
+    }
+
+    const { data, error } = await invoke("add_ai_message", {
+      session_id: selectedSession.id,
+      content: userMessage || " ",
+      pause_session: true,
+      attachment_url: attachmentUrl,
+      attachment_type: attachmentTypeFinal,
+    })
     setLoading(false)
     if (error || !data?.ok) { setError(error?.message || data?.error || "Failed to add message"); return }
-    setUserMessage(""); await loadMessages(selectedSession.id)
+    setUserMessage("")
+    clearAttachment()
+    await loadMessages(selectedSession.id)
   }
   async function runTurn(model?: string) {
     if (!selectedSession) return
@@ -836,7 +896,23 @@ function AiPanel({ supabase }: { supabase: any }) {
                       boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
                       userSelect: "contain" as any,
                     }}>
-                      {m.content}
+                      {m.attachment_url && m.attachment_type === "image" && (
+                        <img
+                          src={m.attachment_url}
+                          alt="attachment"
+                          style={{ display: "block", maxWidth: "100%", maxHeight: 320, borderRadius: 8, marginBottom: m.content.trim() ? 10 : 0, objectFit: "contain" }}
+                        />
+                      )}
+                      {m.attachment_url && m.attachment_type === "pdf" && (
+                        <a href={m.attachment_url} target="_blank" rel="noopener noreferrer"
+                          style={{ display: "inline-flex", alignItems: "center", gap: 8, marginBottom: m.content.trim() ? 10 : 0, padding: "8px 12px", background: isUser ? "#ffffff22" : "#0000000a", borderRadius: 8, textDecoration: "none", color: isUser ? "#e2e8f0" : C.textSecondary, fontSize: 13, fontWeight: 600, fontFamily: FONT }}>
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" width={16} height={16} fill="currentColor">
+                            <path d="M64 480L64 96C64 60.7 92.7 32 128 32L384 32L384 160C384 177.7 398.3 192 416 192L544 192L544 480C544 515.3 515.3 544 480 544L128 544C92.7 544 64 515.3 64 480zM416 32L544 160L416 160L416 32z"/>
+                          </svg>
+                          View PDF
+                        </a>
+                      )}
+                      {m.content.trim()}
                     </div>
                   </div>
                 </div>
@@ -883,6 +959,37 @@ function AiPanel({ supabase }: { supabase: any }) {
           background: C.chatBg,
           borderTop: `1px solid ${C.chatBorder}`,
         }}>
+          {/* Attachment preview */}
+          {attachmentFile && (
+            <div style={{
+              marginBottom: 10, padding: "10px 14px",
+              background: "#f1f5f9", border: `1px solid ${C.chatBorder}`,
+              borderRadius: 10, display: "flex", alignItems: "center", gap: 12,
+            }}>
+              {attachmentPreview ? (
+                <img src={attachmentPreview} alt="attachment" style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 6, flexShrink: 0 }} />
+              ) : (
+                <div style={{ width: 48, height: 48, borderRadius: 6, background: "#e2e8f0", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" width={22} height={22} fill={C.textMuted}>
+                    <path d="M64 480L64 96C64 60.7 92.7 32 128 32L384 32L384 160C384 177.7 398.3 192 416 192L544 192L544 480C544 515.3 515.3 544 480 544L128 544C92.7 544 64 515.3 64 480zM416 32L544 160L416 160L416 32z"/>
+                  </svg>
+                </div>
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.textPrimary, fontFamily: FONT, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{attachmentFile.name}</div>
+                <div style={{ fontSize: 12, color: C.textMuted, fontFamily: FONT }}>{(attachmentFile.size / 1024).toFixed(0)} KB · {attachmentType}</div>
+              </div>
+              <button onClick={clearAttachment} title="Remove attachment"
+                style={{ background: "none", border: "none", cursor: "pointer", color: C.textMuted, padding: 4, display: "flex", alignItems: "center" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "#ef4444")}
+                onMouseLeave={e => (e.currentTarget.style.color = C.textMuted)}>
+                <svg viewBox="0 0 640 640" width={16} height={16} fill="currentColor">
+                  <path d="M342.6 250.6L512 420.1L489.4 442.7L320 273.3L150.6 442.7L128 420.1L297.4 250.6L128 81.4L150.6 58.7L320 228.1L489.4 58.7L512 81.4L342.6 250.6z"/>
+                </svg>
+              </button>
+            </div>
+          )}
+
           <div style={{
             display: "flex", gap: 10, alignItems: "flex-end",
             background: C.inputBg, border: `1.5px solid ${C.inputBorder}`,
@@ -913,6 +1020,28 @@ function AiPanel({ supabase }: { supabase: any }) {
                   e.target.style.height = Math.min(e.target.scrollHeight, 400) + "px"
                 }}
             />
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,application/pdf"
+              style={{ display: "none" }}
+              onChange={handleFileSelect}
+            />
+            {/* Attach */}
+            <button onClick={() => fileInputRef.current?.click()} title="Attach image or PDF" disabled={!selectedSession}
+              style={{
+                flexShrink: 0, width: 48, height: 48, borderRadius: 10,
+                background: attachmentFile ? C.accent + "15" : "transparent",
+                border: `1.5px solid ${attachmentFile ? C.accent : C.inputBorder}`,
+                cursor: selectedSession ? "pointer" : "not-allowed",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                color: attachmentFile ? C.accent : C.textMuted,
+              }}>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" width={22} height={22} fill="currentColor">
+                <path d="M364.5 502.1L152.4 293.6C112.5 254.3 112.5 190.5 152.4 151.2C192.2 111.9 256.9 111.9 296.7 151.2L508.9 359.7C534.6 385 534.6 426.2 508.9 451.5C483.2 476.8 441.4 476.8 415.6 451.5L215.7 254.9C204.1 243.5 204.1 225 215.7 213.6C227.3 202.2 246.2 202.2 257.8 213.6L447.1 399.8L480 367.3L290.7 181.1C262.4 153.2 216.4 153.2 188.1 181.1C159.8 209 159.8 254.5 188.1 282.4L388 479C430.4 520.9 499.3 520.9 541.7 479C584.1 437.1 584.1 369.1 541.7 327.2L329.5 118.7L296.6 151.2L508.8 359.7"/>
+              </svg>
+            </button>
             {/* Mic */}
             <button onClick={toggleListening} title={listening ? "Stop" : "Voice input"}
               style={{
@@ -928,13 +1057,13 @@ function AiPanel({ supabase }: { supabase: any }) {
               </svg>
             </button>
             {/* Send */}
-            <button onClick={addMessage} disabled={anyRunning || !userMessage.trim() || !selectedSession}
+            <button onClick={addMessage} disabled={anyRunning || (!userMessage.trim() && !attachmentFile) || !selectedSession}
               style={{
                 flexShrink: 0, width: 48, height: 48, borderRadius: 10,
-                background: userMessage.trim() && selectedSession && !anyRunning ? C.accent : "#e2e8f0",
-                border: "none", cursor: userMessage.trim() && !anyRunning ? "pointer" : "not-allowed",
+                background: (userMessage.trim() || attachmentFile) && selectedSession && !anyRunning ? C.accent : "#e2e8f0",
+                border: "none", cursor: (userMessage.trim() || attachmentFile) && !anyRunning ? "pointer" : "not-allowed",
                 display: "flex", alignItems: "center", justifyContent: "center",
-                color: userMessage.trim() && selectedSession && !anyRunning ? "#fff" : "#94a3b8",
+                color: (userMessage.trim() || attachmentFile) && selectedSession && !anyRunning ? "#fff" : "#94a3b8",
                 transition: "background 0.15s",
               }}>
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" width={26} height={26} fill="currentColor">

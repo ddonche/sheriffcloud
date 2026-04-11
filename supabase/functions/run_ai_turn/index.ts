@@ -20,6 +20,8 @@ type Mode = "collaborative" | "balanced" | "adversarial" | "decision"
 type MessageRow = {
   role: "user" | Speaker | "system"
   content: string
+  attachment_url?: string
+  attachment_type?: string
 }
 
 function providerFromSpeaker(speaker: Speaker): string {
@@ -107,17 +109,28 @@ async function callOpenAI(apiKey: string, identity: Speaker, transcript: Message
 
   const messages = transcript.map(m => {
     if (m.role === "system") {
-      return {
-        role: "system" as const,
-        content: m.content,
-      }
+      return { role: "system" as const, content: m.content }
     }
 
     if (m.role === "user") {
-      return {
-        role: "user" as const,
-        content: m.content,
+      if (m.attachment_url && m.attachment_type === "image") {
+        return {
+          role: "user" as const,
+          content: [
+            { type: "image_url" as const, image_url: { url: m.attachment_url } },
+            ...(m.content.trim() ? [{ type: "text" as const, text: m.content }] : []),
+          ],
+        }
       }
+      if (m.attachment_url && m.attachment_type === "pdf") {
+        return {
+          role: "user" as const,
+          content: m.content.trim()
+            ? `${m.content}\n\n[PDF attachment: ${m.attachment_url}]`
+            : `[PDF attachment: ${m.attachment_url}]`,
+        }
+      }
+      return { role: "user" as const, content: m.content }
     }
 
     return {
@@ -146,10 +159,33 @@ async function callGemini(apiKey: string, identity: Speaker, transcript: Message
 
   const rawContents = transcript
     .filter(m => m.role !== "system")
-    .map(m => ({
-      role: m.role === "user" ? "user" : "model",
-      parts: [{ text: m.role === "user" ? m.content : `${speakerLabel(m.role as Speaker)}: ${m.content}` }],
-    }))
+    .map(m => {
+      if (m.role === "user" && m.attachment_url && m.attachment_type === "image") {
+        const parts: any[] = [{ text: m.content.trim() || " " }]
+        parts.unshift({ image_url: { url: m.attachment_url } })
+        // Gemini uses fileData for URLs
+        return {
+          role: "user",
+          parts: [
+            { fileData: { mimeType: "image/jpeg", fileUri: m.attachment_url } },
+            ...(m.content.trim() ? [{ text: m.content }] : []),
+          ],
+        }
+      }
+      if (m.role === "user" && m.attachment_url && m.attachment_type === "pdf") {
+        return {
+          role: "user",
+          parts: [
+            { fileData: { mimeType: "application/pdf", fileUri: m.attachment_url } },
+            ...(m.content.trim() ? [{ text: m.content }] : []),
+          ],
+        }
+      }
+      return {
+        role: m.role === "user" ? "user" : "model",
+        parts: [{ text: m.role === "user" ? m.content : `${speakerLabel(m.role as Speaker)}: ${m.content}` }],
+      }
+    })
 
   // Merge consecutive same-role messages
   const contents: { role: string; parts: { text: string }[] }[] = []
@@ -205,16 +241,35 @@ async function callClaude(apiKey: string, identity: Speaker, transcript: Message
 
   const rawMessages = transcript
     .filter(m => m.role !== "system")
-    .map(m => ({
-      role: m.role === "user" ? "user" as const : "assistant" as const,
-      content: m.role === "user" ? m.content : `${speakerLabel(m.role as Speaker)}: ${m.content}`,
-    }))
+    .map(m => {
+      if (m.role === "user" && m.attachment_url && m.attachment_type === "image") {
+        return {
+          role: "user" as const,
+          content: [
+            { type: "image" as const, source: { type: "url" as const, url: m.attachment_url } },
+            ...(m.content.trim() ? [{ type: "text" as const, text: m.content }] : []),
+          ],
+        }
+      }
+      if (m.role === "user" && m.attachment_url && m.attachment_type === "pdf") {
+        return {
+          role: "user" as const,
+          content: m.content.trim()
+            ? `${m.content}\n\n[PDF attachment: ${m.attachment_url}]`
+            : `[PDF attachment: ${m.attachment_url}]`,
+        }
+      }
+      return {
+        role: m.role === "user" ? "user" as const : "assistant" as const,
+        content: m.role === "user" ? m.content : `${speakerLabel(m.role as Speaker)}: ${m.content}`,
+      }
+    })
 
-  // Merge consecutive same-role messages
-  const messages: { role: "user" | "assistant"; content: string }[] = []
+  // Merge consecutive same-role messages — only merge string content
+  const messages: { role: "user" | "assistant"; content: any }[] = []
   for (const msg of rawMessages) {
     const last = messages[messages.length - 1]
-    if (last && last.role === msg.role) {
+    if (last && last.role === msg.role && typeof last.content === "string" && typeof msg.content === "string") {
       last.content += "\n\n" + msg.content
     } else {
       messages.push({ ...msg })
@@ -247,17 +302,28 @@ async function callGrok(apiKey: string, identity: Speaker, transcript: MessageRo
 
   const messages = transcript.map(m => {
     if (m.role === "system") {
-      return {
-        role: "system" as const,
-        content: m.content,
-      }
+      return { role: "system" as const, content: m.content }
     }
 
     if (m.role === "user") {
-      return {
-        role: "user" as const,
-        content: m.content,
+      if (m.attachment_url && m.attachment_type === "image") {
+        return {
+          role: "user" as const,
+          content: [
+            { type: "image_url" as const, image_url: { url: m.attachment_url } },
+            ...(m.content.trim() ? [{ type: "text" as const, text: m.content }] : []),
+          ],
+        }
       }
+      if (m.attachment_url && m.attachment_type === "pdf") {
+        return {
+          role: "user" as const,
+          content: m.content.trim()
+            ? `${m.content}\n\n[PDF attachment: ${m.attachment_url}]`
+            : `[PDF attachment: ${m.attachment_url}]`,
+        }
+      }
+      return { role: "user" as const, content: m.content }
     }
 
     return {
@@ -387,21 +453,25 @@ serve(async (req) => {
 
   const { data: messages, error: messagesError } = await supabase
     .from("ai_messages")
-    .select("role, content, created_at")
+    .select("role, content, attachment_url, attachment_type, created_at")
     .eq("session_id", session.id)
     .order("created_at", { ascending: true })
 
   if (messagesError) return json(500, { ok: false, error: messagesError.message })
   console.log("message count:", messages?.length ?? 0)
 
-  // Only pass master prompt if session has use_master_prompt = true and the user has one set
   const masterPrompt = session.use_master_prompt !== false
     ? (accountSettings?.master_prompt ?? undefined)
     : undefined
 
   const transcript: MessageRow[] = [
     { role: "system", content: buildSystemPrompt(currentSpeaker, participants, mode, masterPrompt) },
-    ...((messages ?? []).map(m => ({ role: m.role as MessageRow["role"], content: m.content }))),
+    ...((messages ?? []).map(m => ({
+      role: m.role as MessageRow["role"],
+      content: m.content,
+      attachment_url: m.attachment_url ?? undefined,
+      attachment_type: m.attachment_type ?? undefined,
+    }))),
   ]
 
   let reply = ""
