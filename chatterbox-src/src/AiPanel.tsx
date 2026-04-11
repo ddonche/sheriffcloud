@@ -9,6 +9,7 @@ type AiSession = {
   first_speaker: string
   participants: AiProvider[]
   mode: AiMode
+  use_master_prompt: boolean
   created_at: string
 }
 
@@ -116,6 +117,18 @@ function AiPanel({ supabase }: { supabase: any }) {
   const [sidebarWidth, setSidebarWidth] = useState(300)
   const [sidebarOpen, setSidebarOpen] = useState(true)
 
+  function closeNewForm() {
+    setShowNewForm(false)
+    setShowMasterPromptEditor(false)
+  }
+
+  // ── Master prompt state ───────────────────────────────────────────────────
+  const [masterPrompt, setMasterPrompt] = useState("")
+  const [masterPromptDraft, setMasterPromptDraft] = useState("")
+  const [savingMasterPrompt, setSavingMasterPrompt] = useState(false)
+  const [showMasterPromptEditor, setShowMasterPromptEditor] = useState(false)
+  const [newUseMasterPrompt, setNewUseMasterPrompt] = useState(true)
+
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const transcriptScrollRef = useRef<HTMLDivElement | null>(null)
   const lastMessageRef = useRef<HTMLDivElement | null>(null)
@@ -123,6 +136,9 @@ function AiPanel({ supabase }: { supabase: any }) {
   const isDragging = useRef(false)
   const dragStartX = useRef(0)
   const dragStartWidth = useRef(0)
+  const showNewFormRef = useRef(false)
+
+  useEffect(() => { showNewFormRef.current = showNewForm }, [showNewForm])
 
   function toggleListening() {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
@@ -157,8 +173,7 @@ function AiPanel({ supabase }: { supabase: any }) {
     return { data, error: res.ok ? null : { message: data?.error ?? `HTTP ${res.status}` } }
   }
 
-  useEffect(() => { loadSessions(); loadSavedKeys() }, [])
-  
+  useEffect(() => { loadSessions(); loadSavedKeys(); loadMasterPrompt() }, [])
 
   useEffect(() => {
     const el = transcriptScrollRef.current
@@ -169,7 +184,7 @@ function AiPanel({ supabase }: { supabase: any }) {
     function onMouseMove(e: MouseEvent) {
       if (!isDragging.current) return
       const delta = e.clientX - dragStartX.current
-      setSidebarWidth(Math.max(180, Math.min(520, dragStartWidth.current + delta)))
+      setSidebarWidth(Math.max(showNewFormRef.current ? 380 : 300, Math.min(800, dragStartWidth.current + delta)))
     }
     function onMouseUp() {
       isDragging.current = false
@@ -196,17 +211,48 @@ function AiPanel({ supabase }: { supabase: any }) {
   async function selectSession(session: AiSession) {
     setSelectedSession(session); await loadMessages(session.id)
   }
+
+  // ── Master prompt ─────────────────────────────────────────────────────────
+  async function loadMasterPrompt() {
+    const { data, error } = await supabase
+      .from("account_settings")
+      .select("master_prompt")
+      .single()
+    if (!error && data?.master_prompt) {
+      setMasterPrompt(data.master_prompt)
+      setMasterPromptDraft(data.master_prompt)
+    }
+  }
+
+  async function saveMasterPrompt() {
+    setSavingMasterPrompt(true)
+    const { data: { session } } = await supabase.auth.getSession()
+    const userId = session?.user?.id
+    if (!userId) { setSavingMasterPrompt(false); return }
+    await supabase
+      .from("account_settings")
+      .upsert({ user_id: userId, master_prompt: masterPromptDraft.trim(), updated_at: new Date().toISOString() })
+    setMasterPrompt(masterPromptDraft.trim())
+    setSavingMasterPrompt(false)
+    setShowMasterPromptEditor(false)
+  }
+
   async function createSession() {
     if (!newTitle.trim() || newParticipants.length < 1) return
     setLoading(true); setError(null)
     const { data, error } = await invoke("create_ai_session", {
-      title: newTitle, first_speaker: newParticipants[0], participants: newParticipants,
-      mode: newMode, opening_message: openingMessage || undefined,
+      title: newTitle,
+      first_speaker: newParticipants[0],
+      participants: newParticipants,
+      mode: newMode,
+      opening_message: openingMessage || undefined,
+      use_master_prompt: newUseMasterPrompt,
     })
     setLoading(false)
     if (error || !data?.ok) { setError(error?.message || data?.error || "Failed to create session"); return }
-    setShowNewForm(false); setNewTitle(""); setOpeningMessage("")
+    closeNewForm(); setNewTitle(""); setOpeningMessage("")
     setNewParticipants(["chatgpt", "gemini"]); setNewMode("balanced")
+    setNewUseMasterPrompt(true)
     await loadSessions()
     if (data.session) await selectSession(data.session)
   }
@@ -291,7 +337,7 @@ function AiPanel({ supabase }: { supabase: any }) {
             </svg>
           </button>
           {/* New session button */}
-          <button onClick={() => { setShowNewForm(v => !v); setShowCredentials(false) }} title="New Session"
+          <button onClick={() => { if (showNewForm) { closeNewForm() } else { setShowNewForm(true); setShowCredentials(false) } }} title="New Session"
             style={{
               width: 42, height: 42, display: "flex", alignItems: "center", justifyContent: "center",
               background: showNewForm ? C.sidebarHover : "transparent",
@@ -438,6 +484,111 @@ function AiPanel({ supabase }: { supabase: any }) {
               }}
             />
 
+            {/* ── Master prompt toggle ── */}
+            <div style={{ borderTop: `1px solid ${C.sidebarBorder}`, paddingTop: 12, display: "grid", gap: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  {/* Toggle */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!masterPrompt) {
+                        setShowMasterPromptEditor(true)
+                        setNewUseMasterPrompt(true)
+                      } else {
+                        setNewUseMasterPrompt(v => !v)
+                      }
+                    }}
+                    style={{
+                      width: 36, height: 20, borderRadius: 10, border: "none", cursor: "pointer", padding: 0,
+                      background: newUseMasterPrompt && masterPrompt ? C.accent : "#334155",
+                      position: "relative", transition: "background 0.2s", flexShrink: 0,
+                    }}
+                  >
+                    <div style={{
+                      position: "absolute", top: 3, left: newUseMasterPrompt && masterPrompt ? 19 : 3,
+                      width: 14, height: 14, borderRadius: "50%", background: "#fff",
+                      transition: "left 0.2s",
+                    }} />
+                  </button>
+                  <span style={{
+                    fontSize: 13, fontWeight: 600, fontFamily: FONT,
+                    color: newUseMasterPrompt && masterPrompt ? "#e2e8f0" : C.textMuted,
+                  }}>
+                    Master prompt
+                  </span>
+                  {masterPrompt && (
+                    <span style={{ fontSize: 11, color: "#22c55e", fontWeight: 700, fontFamily: FONT }}>set</span>
+                  )}
+                </div>
+                {/* Edit / Add button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMasterPromptDraft(masterPrompt)
+                    setShowMasterPromptEditor(v => !v)
+                  }}
+                  style={{
+                    fontSize: 12, fontWeight: 700, fontFamily: FONT,
+                    color: showMasterPromptEditor ? C.accent : C.textMuted,
+                    background: "none", border: "none", cursor: "pointer", padding: "2px 6px",
+                  }}
+                >
+                  {masterPrompt ? "Edit" : "+ Add"}
+                </button>
+              </div>
+
+              {/* Inline editor */}
+              {showMasterPromptEditor && (
+                <div style={{ display: "grid", gap: 8 }}>
+                  <textarea
+                    value={masterPromptDraft}
+                    onChange={e => setMasterPromptDraft(e.target.value)}
+                    rows={5}
+                    placeholder={
+                      "e.g. Always be concise and direct.\n" +
+                      "Assume I have a technical background.\n" +
+                      "Prefer bullet points over long paragraphs.\n" +
+                      "When you disagree, say so plainly."
+                    }
+                    style={{
+                      padding: "10px 12px", fontSize: 13, resize: "vertical",
+                      background: "#1e293b", border: `1px solid ${C.accent}55`,
+                      borderRadius: 8, color: "#e2e8f0", outline: "none",
+                      width: "100%", boxSizing: "border-box" as const,
+                      fontFamily: FONT, lineHeight: 1.6,
+                    }}
+                  />
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      type="button"
+                      onClick={saveMasterPrompt}
+                      disabled={savingMasterPrompt}
+                      style={{
+                        flex: 1, padding: "9px", background: C.accent, color: "#fff",
+                        border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600,
+                        cursor: "pointer", fontFamily: FONT,
+                        opacity: savingMasterPrompt ? 0.6 : 1,
+                      }}
+                    >
+                      {savingMasterPrompt ? "Saving…" : "Save Prompt"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowMasterPromptEditor(false)}
+                      style={{
+                        padding: "9px 14px", background: "transparent",
+                        border: `1px solid ${C.sidebarBorder}`, borderRadius: 8,
+                        fontSize: 13, color: C.textMuted, cursor: "pointer", fontFamily: FONT,
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={createSession} disabled={loading || !newTitle.trim() || newParticipants.length < 1}
                 style={{
@@ -447,7 +598,7 @@ function AiPanel({ supabase }: { supabase: any }) {
                 }}>
                 Create
               </button>
-              <button onClick={() => setShowNewForm(false)}
+              <button onClick={closeNewForm}
                 style={{
                   flex: 1, padding: "11px", background: "transparent",
                   border: `1px solid ${C.sidebarBorder}`, borderRadius: 8,
@@ -459,8 +610,8 @@ function AiPanel({ supabase }: { supabase: any }) {
           </div>
         )}
 
-        {/* Sessions list */}
-        <div style={{ flex: 1, overflowY: "auto" }}>
+        {/* Sessions list — hidden while new session form is open */}
+        <div style={{ flex: 1, overflowY: "auto", display: showNewForm ? "none" : "block" }}>
           {sessions.length === 0 && (
             <div style={{ padding: "32px 20px", textAlign: "center" }}>
               <div style={{ color: C.textMuted, fontSize: 17, fontFamily: FONT }}>No sessions yet.</div>
@@ -604,7 +755,7 @@ function AiPanel({ supabase }: { supabase: any }) {
           </div>
         )}
 
-        {/* Messages — scrollable, takes all remaining space */}
+        {/* Messages */}
         <div ref={transcriptScrollRef}
           className="rdeo-transcript"
           onScroll={e => setShowScrollTop((e.currentTarget as HTMLDivElement).scrollTop > 200)}
@@ -695,10 +846,10 @@ function AiPanel({ supabase }: { supabase: any }) {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Scroll buttons — always visible when a session is active */}
+        {/* Scroll buttons */}
         {selectedSession && (
           <div style={{ position: "fixed", bottom: 220, right: 36, display: "flex", flexDirection: "column", gap: 8, zIndex: 50 }}>
-            <button onClick={() => { const el = document.querySelector(".rdeo-transcript") as HTMLElement; el?.scrollTo({ top: 0, behavior: "smooth" }) }}
+            <button onClick={() => transcriptScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
               style={{
                 width: 40, height: 40, borderRadius: "50%",
                 background: "#fff", border: `1px solid ${C.chatBorder}`,
@@ -710,7 +861,7 @@ function AiPanel({ supabase }: { supabase: any }) {
                 <path d="M320 576C461.4 576 576 461.4 576 320C576 178.6 461.4 64 320 64C178.6 64 64 178.6 64 320C64 461.4 178.6 576 320 576zM441 335C450.4 344.4 450.4 359.6 441 368.9C431.6 378.2 416.4 378.3 407.1 368.9L320.1 281.9L233.1 368.9C223.7 378.3 208.5 378.3 199.2 368.9C189.9 359.5 189.8 344.3 199.2 335L303 231C312.4 221.6 327.6 221.6 336.9 231L441 335z"/>
               </svg>
             </button>
-            <button onClick={() => { const el = document.querySelector(".rdeo-transcript") as HTMLElement; el?.scrollTo({ top: el.scrollHeight, behavior: "smooth" }) }}
+            <button onClick={() => transcriptScrollRef.current?.scrollTo({ top: transcriptScrollRef.current.scrollHeight, behavior: "smooth" })}
               style={{
                 width: 40, height: 40, borderRadius: "50%",
                 background: "#fff", border: `1px solid ${C.chatBorder}`,
@@ -725,7 +876,7 @@ function AiPanel({ supabase }: { supabase: any }) {
           </div>
         )}
 
-        {/* Input — sits below messages, never overlaps */}
+        {/* Input */}
         <div style={{
           flexShrink: 0,
           padding: "16px 28px 22px",
@@ -792,7 +943,7 @@ function AiPanel({ supabase }: { supabase: any }) {
             </button>
           </div>
 
-          {/* Run buttons */}
+          {/* Run buttons + bottom copy */}
           {selectedSession && (
             <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap", alignItems: "center" }}>
               {participants.map(pid => {
@@ -815,7 +966,9 @@ function AiPanel({ supabase }: { supabase: any }) {
                   </button>
                 )
               })}
+              {/* Auto Next — icon+text on desktop, icon-only on mobile */}
               <button onClick={() => runTurn()} disabled={anyRunning}
+                title="Auto Next"
                 style={{
                   padding: "7px 18px", borderRadius: 8,
                   background: runningModel === "auto" ? C.textPrimary : "transparent",
@@ -825,9 +978,41 @@ function AiPanel({ supabase }: { supabase: any }) {
                   cursor: anyRunning ? "not-allowed" : "pointer",
                   opacity: anyRunning && runningModel !== "auto" ? 0.3 : 1,
                   fontFamily: FONT,
+                  display: "flex", alignItems: "center", gap: 6,
                 }}>
-                {runningModel === "auto" ? "…" : "Auto Next"}
+                {runningModel === "auto"
+                  ? "…"
+                  : <>
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" width={13} height={13} fill="currentColor">
+                        <path d="M149 100.8C161.9 93.8 177.7 94.5 190 102.6L448 272.1L448 128C448 110.3 462.3 96 480 96C497.7 96 512 110.3 512 128L512 512C512 529.7 497.7 544 480 544C462.3 544 448 529.7 448 512L448 367.9L190 537.5C177.7 545.6 162 546.3 149 539.3C136 532.3 128 518.7 128 504L128 136C128 121.3 136.1 107.8 149 100.8z"/>
+                      </svg>
+                      <span className="rdeo-auto-label">Auto Next</span>
+                    </>
+                }
               </button>
+              {/* Copy chat — bottom, always visible */}
+              {messages.length > 0 && (
+                <button
+                  onClick={copyAllMessages}
+                  title="Copy full chat"
+                  style={{
+                    marginLeft: "auto",
+                    display: "flex", alignItems: "center", gap: 5,
+                    padding: "7px 12px", borderRadius: 8,
+                    border: `2px solid ${copiedAll ? C.accent : C.chatBorder}`,
+                    background: copiedAll ? C.accent + "15" : "transparent",
+                    cursor: "pointer",
+                    color: copiedAll ? C.accent : C.textMuted,
+                    fontSize: 13, fontWeight: 700, fontFamily: FONT,
+                    transition: "all 0.15s",
+                  }}>
+                  {copiedAll ? (
+                    <svg viewBox="0 0 640 640" width={14} height={14} fill="currentColor"><path d="M256 464L80 288L137.4 230.6L256 349.3L502.6 102.6L560 160L256 464z"/></svg>
+                  ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" width={14} height={14} fill="currentColor"><path d="M288 64C252.7 64 224 92.7 224 128L224 384C224 419.3 252.7 448 288 448L480 448C515.3 448 544 419.3 544 384L544 183.4C544 166 536.9 149.3 524.3 137.2L466.6 81.8C454.7 70.4 438.8 64 422.3 64L288 64zM160 192C124.7 192 96 220.7 96 256L96 512C96 547.3 124.7 576 160 576L352 576C387.3 576 416 547.3 416 512L416 496L352 496L352 512L160 512L160 256L176 256L176 192L160 192z"/></svg>
+                  )}
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -874,13 +1059,26 @@ function AiPanel({ supabase }: { supabase: any }) {
           0%, 100% { border-color: #7c3aed; box-shadow: 0 0 0 3px rgba(124,58,237,0.25); }
           50%       { border-color: #e040a0; box-shadow: 0 0 0 6px rgba(224,64,160,0.2); }
         }
+        @media (max-width: 860px) {
+          .rdeo-auto-label { display: none; }
+        }
       `}</style>
 
       {/* DESKTOP */}
-      <div className="rdeo-desktop">
+      <div className="rdeo-desktop" style={{ position: "relative" }}>
+        {/* Backdrop — dismisses new session form on click */}
+        {showNewForm && (
+          <div
+            onClick={closeNewForm}
+            style={{
+              position: "fixed", inset: 0, zIndex: 4,
+              background: "rgba(0,0,0,0.45)",
+            }}
+          />
+        )}
         {/* Sidebar */}
         {sidebarOpen && (
-          <div style={{ width: sidebarWidth, background: C.sidebarBg, display: "flex", flexDirection: "column", flexShrink: 0, overflow: "hidden" }}>
+          <div style={{ width: showNewForm ? Math.max(380, sidebarWidth) : sidebarWidth, background: C.sidebarBg, display: "flex", flexDirection: "column", flexShrink: 0, overflow: "hidden", position: "relative", zIndex: 5 }}>
             {renderSidebarHeader()}
             <div className="rdeo-sidebar" style={{ flex: 1, display: "flex", flexDirection: "column", overflowY: "auto" }}>
               {renderSessionsList()}
@@ -890,7 +1088,6 @@ function AiPanel({ supabase }: { supabase: any }) {
 
         {/* Drag handle + toggle */}
         <div style={{ width: 16, flexShrink: 0, display: "flex", alignItems: "stretch", position: "relative", zIndex: 5 }}>
-          {/* Drag strip — only visible when open */}
           {sidebarOpen && (
             <div
               onMouseDown={e => {
@@ -909,7 +1106,6 @@ function AiPanel({ supabase }: { supabase: any }) {
               onMouseLeave={e => { if (!isDragging.current) e.currentTarget.style.background = C.sidebarBorder }}
             />
           )}
-          {/* Toggle button */}
           <button
             onClick={() => setSidebarOpen(v => !v)}
             title={sidebarOpen ? "Collapse sessions" : "Expand sessions"}
@@ -940,6 +1136,7 @@ function AiPanel({ supabase }: { supabase: any }) {
           </div>
         </div>
       </div>
+      {/* END DESKTOP */}
 
       {/* MOBILE */}
       <div className="rdeo-mobile">

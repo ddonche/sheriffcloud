@@ -58,6 +58,7 @@ serve(async (req) => {
     participants?: Speaker[]
     mode?: Mode
     opening_message?: string
+    use_master_prompt?: boolean
   }
 
   try {
@@ -81,6 +82,7 @@ serve(async (req) => {
 
   const mode: Mode = VALID_MODES.includes(body.mode as Mode) ? body.mode as Mode : "balanced"
   const openingMessage = (body.opening_message ?? "").trim()
+  const useMasterPrompt = body.use_master_prompt !== false // default true
 
   const { data: session, error: sessionError } = await supabase
     .from("ai_sessions")
@@ -92,6 +94,7 @@ serve(async (req) => {
       next_speaker: firstSpeaker,
       participants,
       mode,
+      use_master_prompt: useMasterPrompt,
     })
     .select("*")
     .single()

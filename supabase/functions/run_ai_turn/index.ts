@@ -37,7 +37,8 @@ function nextSpeaker(current: Speaker, participants: Speaker[]): Speaker {
   return participants[(idx + 1) % participants.length]
 }
 
-function buildSystemPrompt(identity: Speaker, participants: Speaker[], mode: Mode): string {
+// ── masterPrompt is optional — only appended when present and session has use_master_prompt = true
+function buildSystemPrompt(identity: Speaker, participants: Speaker[], mode: Mode, masterPrompt?: string): string {
   const allParticipants = ["the user", ...participants.map(speakerLabel)].join(", ")
 
   const identityStyles: Record<Speaker, string> = {
@@ -73,7 +74,7 @@ function buildSystemPrompt(identity: Speaker, participants: Speaker[], mode: Mod
       `A confident recommendation with clear reasoning is the output. Not a summary of the debate.`,
   }
 
-  return [
+  const parts = [
     `You are ${speakerLabel(identity)}, one of several AI participants in a live discussion alongside ${allParticipants}.`,
     ``,
     `Your first job is to actually answer what the user asked — fully and directly.`,
@@ -88,7 +89,15 @@ function buildSystemPrompt(identity: Speaker, participants: Speaker[], mode: Mod
     modeContext[mode],
     ``,
     `Your voice: ${identityStyles[identity]}`,
-  ].join("\n")
+  ]
+
+  if (masterPrompt?.trim()) {
+    parts.push(``)
+    parts.push(`Additional instructions from the user:`)
+    parts.push(masterPrompt.trim())
+  }
+
+  return parts.join("\n")
 }
 
 // ── Provider callers ─────────────────────────────────────────────────────────
@@ -135,8 +144,6 @@ async function callGemini(apiKey: string, identity: Speaker, transcript: Message
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`
   const systemText = transcript.find(m => m.role === "system")?.content ?? ""
 
-  // Gemini requires strictly alternating user/model roles.
-  // Multiple AI turns in a row must be collapsed into one model turn.
   const rawContents = transcript
     .filter(m => m.role !== "system")
     .map(m => ({
@@ -155,7 +162,6 @@ async function callGemini(apiKey: string, identity: Speaker, transcript: Message
     }
   }
 
-  // Gemini must start with a user message
   if (contents.length > 0 && contents[0].role !== "user") {
     contents.unshift({ role: "user", parts: [{ text: "(conversation start)" }] })
   }
@@ -204,7 +210,7 @@ async function callClaude(apiKey: string, identity: Speaker, transcript: Message
       content: m.role === "user" ? m.content : `${speakerLabel(m.role as Speaker)}: ${m.content}`,
     }))
 
-  // Merge consecutive same-role messages (same fix as Gemini)
+  // Merge consecutive same-role messages
   const messages: { role: "user" | "assistant"; content: string }[] = []
   for (const msg of rawMessages) {
     const last = messages[messages.length - 1]
@@ -215,7 +221,6 @@ async function callClaude(apiKey: string, identity: Speaker, transcript: Message
     }
   }
 
-  // Claude requires the last message to be from the user
   if (messages.length > 0 && messages[messages.length - 1].role === "assistant") {
     messages.push({ role: "user", content: "(please continue)" })
   }
@@ -327,6 +332,13 @@ serve(async (req) => {
   if (profile.is_suspended) return json(403, { ok: false, error: "Account suspended" })
   if (!profile.has_ai_access) return json(403, { ok: false, error: "AI access denied" })
 
+  // Fetch user settings (master prompt) — null row is fine, just means no settings yet
+  const { data: accountSettings } = await supabase
+    .from("account_settings")
+    .select("master_prompt")
+    .eq("user_id", userId)
+    .single()
+
   let body: { session_id?: string; model?: string; pause_after_turn?: boolean }
   try { body = await req.json() } catch { return json(400, { ok: false, error: "Invalid JSON body" }) }
 
@@ -382,8 +394,13 @@ serve(async (req) => {
   if (messagesError) return json(500, { ok: false, error: messagesError.message })
   console.log("message count:", messages?.length ?? 0)
 
+  // Only pass master prompt if session has use_master_prompt = true and the user has one set
+  const masterPrompt = session.use_master_prompt !== false
+    ? (accountSettings?.master_prompt ?? undefined)
+    : undefined
+
   const transcript: MessageRow[] = [
-    { role: "system", content: buildSystemPrompt(currentSpeaker, participants, mode) },
+    { role: "system", content: buildSystemPrompt(currentSpeaker, participants, mode, masterPrompt) },
     ...((messages ?? []).map(m => ({ role: m.role as MessageRow["role"], content: m.content }))),
   ]
 
