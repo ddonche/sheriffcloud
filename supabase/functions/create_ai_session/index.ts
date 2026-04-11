@@ -32,8 +32,12 @@ serve(async (req) => {
 
   let userId: string
   try {
-    const token = authHeader.replace("Bearer ", "")
-    const payload = JSON.parse(atob(token.split(".")[1]))
+    const token = authHeader.replace(/^Bearer\s+/i, "")
+    const parts = token.split(".")
+    if (parts.length < 2) throw new Error("Malformed token")
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/")
+    const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4)
+    const payload = JSON.parse(atob(padded))
     userId = payload.sub
     if (!userId) throw new Error("No subject")
   } catch {
