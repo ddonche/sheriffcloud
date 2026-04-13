@@ -925,7 +925,7 @@ function AiPanel({ supabase }: { supabase: any }) {
         {/* Scroll buttons */}
         {selectedSession && (
           <div style={{ position: "fixed", bottom: 220, right: 36, display: "flex", flexDirection: "column", gap: 8, zIndex: 50 }}>
-            <button onClick={() => transcriptScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
+            <button onClick={() => { const el = document.querySelector(".rdeo-transcript") as HTMLElement; el?.scrollTo({ top: 0, behavior: "smooth" }) }}
               style={{
                 width: 40, height: 40, borderRadius: "50%",
                 background: "#fff", border: `1px solid ${C.chatBorder}`,
@@ -937,7 +937,7 @@ function AiPanel({ supabase }: { supabase: any }) {
                 <path d="M320 576C461.4 576 576 461.4 576 320C576 178.6 461.4 64 320 64C178.6 64 64 178.6 64 320C64 461.4 178.6 576 320 576zM441 335C450.4 344.4 450.4 359.6 441 368.9C431.6 378.2 416.4 378.3 407.1 368.9L320.1 281.9L233.1 368.9C223.7 378.3 208.5 378.3 199.2 368.9C189.9 359.5 189.8 344.3 199.2 335L303 231C312.4 221.6 327.6 221.6 336.9 231L441 335z"/>
               </svg>
             </button>
-            <button onClick={() => transcriptScrollRef.current?.scrollTo({ top: transcriptScrollRef.current.scrollHeight, behavior: "smooth" })}
+            <button onClick={() => { const el = document.querySelector(".rdeo-transcript") as HTMLElement; el?.scrollTo({ top: el.scrollHeight, behavior: "smooth" }) }}
               style={{
                 width: 40, height: 40, borderRadius: "50%",
                 background: "#fff", border: `1px solid ${C.chatBorder}`,

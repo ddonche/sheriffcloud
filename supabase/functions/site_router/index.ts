@@ -59,13 +59,11 @@ async function getLikesForEntities(supabase: any, entityType: string, entityIds:
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
-  // Use service role for data fetching
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   )
 
-  // Get current user from auth header if present
   const authHeader = req.headers.get('authorization') ?? ''
   const userToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
   let userId: string | null = null
@@ -81,7 +79,6 @@ Deno.serve(async (req) => {
 
   if (!subdomain) return json({ type: 'not_found' }, 404)
 
-  // ── Resolve site ──────────────────────────────────────────────
   const { data: site, error: siteErr } = await supabase
     .from('sites')
     .select('id, name, subdomain, custom_domain, owner_id, site_type, logo_url, bio, tagline')
@@ -90,7 +87,6 @@ Deno.serve(async (req) => {
 
   if (siteErr || !site) return json({ type: 'not_found' })
 
-  // ── Fetch authors (all spur_authors for this site, joined to profiles) ───────
   const { data: authorRows } = await supabase
     .from('spur_authors')
     .select('user_id, role, joined_at')
@@ -120,7 +116,6 @@ Deno.serve(async (req) => {
     .select('id, username, display_name, avatar_url, bio')
     .in('id', authorUserIds)
 
-  // Get post counts and last published per author
   const { data: postStats } = await supabase
     .from('spur_posts')
     .select('author_id, published_at')
@@ -151,7 +146,6 @@ Deno.serve(async (req) => {
       return a.last_published_at > b.last_published_at ? -1 : 1
     })
 
-  // Keep safeAuthor for backward compat on /blog/:slug route
   const safeAuthor = (profileRows ?? []).find((p: any) => p.id === site.owner_id) ?? {
     id: site.owner_id,
     username: 'unknown',
@@ -233,7 +227,6 @@ Deno.serve(async (req) => {
       ? await getCommentCountsForEntities(supabase, 'spur_post', postIds)
       : {}
 
-    // ── Attach serial summaries to posts ──────────────────────
     const serialIds = [...new Set(postList.map((p: any) => p.serial_id).filter(Boolean))]
     let serialMap: Record<string, any> = {}
 
@@ -314,7 +307,6 @@ Deno.serve(async (req) => {
     let toc = null
     let prev = null
     let next = null
-
     let discovery = null
 
     if (post.is_in_discovery && post.discovery_category_id) {
@@ -382,7 +374,6 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Fetch post author
     let postAuthor = safeAuthor
     if (post.author_id !== site.owner_id) {
       const { data: pa } = await supabase
@@ -394,7 +385,6 @@ Deno.serve(async (req) => {
     }
 
     const { counts, liked } = await getLikesForEntities(supabase, 'spur_post', [post.id], userId)
-
     const commentCounts = await getCommentCountsForEntities(supabase, 'spur_post', [post.id])
 
     const postWithLikes = {
@@ -415,6 +405,30 @@ Deno.serve(async (req) => {
       prev,
       next,
     })
+  }
+
+  // ── Route: /codex ─────────────────────────────────────────────
+  if (path === '/codex' || path.startsWith('/codex')) {
+    const { data: codices } = await supabase
+      .from('codices')
+      .select('id, name, slug, short_code, description')
+      .eq('site_id', site.id)
+      .order('created_at', { ascending: false })
+
+    const codexList = codices ?? []
+
+    let entries: any[] = []
+    if (codexList.length > 0) {
+      const codexIds = codexList.map((c: any) => c.id)
+      const { data: entryRows } = await supabase
+        .from('codex_entries')
+        .select('*')
+        .in('codex_id', codexIds)
+        .order('sort_order', { ascending: true })
+      entries = entryRows ?? []
+    }
+
+    return json({ type: 'codex_index', site, codices: codexList, entries })
   }
 
   // ── Fallback ──────────────────────────────────────────────────

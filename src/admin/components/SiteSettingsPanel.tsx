@@ -17,20 +17,21 @@ type Site = {
 
 type SiteApp = {
   site_id: string
-  app: "spur" | "docs" | "forum"
+  app: "spur" | "docs" | "forum" | "codex"
   enabled: boolean
 }
 
 type NavSelection =
   | { kind: "site"; siteId: string }
-  | { kind: "app"; siteId: string; app: "spur" | "docs" | "forum" }
+  | { kind: "app"; siteId: string; app: "spur" | "docs" | "forum" | "codex" }
 
 const FONT = `system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`
 
-const APP_META: Record<"spur" | "docs" | "forum", { label: string; color: string }> = {
-  spur: { label: "Spur", color: "#b45309" },
-  docs: { label: "Docs", color: "#0e7490" },
+const APP_META: Record<"spur" | "docs" | "forum" | "codex", { label: string; color: string }> = {
+  spur:  { label: "Spur",  color: "#b45309" },
+  docs:  { label: "Docs",  color: "#0e7490" },
   forum: { label: "Forum", color: "#7c3aed" },
+  codex: { label: "Codex", color: "#7c6af7" },
 }
 
 export default function SiteSettingsPanel({

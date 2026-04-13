@@ -68,6 +68,8 @@ serve(async (req) => {
     session_id?: string
     content?: string
     pause_session?: boolean
+    attachment_url?: string
+    attachment_type?: string
   }
 
   try {
@@ -79,13 +81,15 @@ serve(async (req) => {
   const sessionId = payload.session_id?.trim()
   const content = (payload.content ?? "").trim()
   const pauseSession = payload.pause_session ?? true
+  const attachmentUrl = payload.attachment_url?.trim() || null
+  const attachmentType = payload.attachment_type?.trim() || null
 
   if (!sessionId) {
     return json(400, { ok: false, error: "session_id is required" })
   }
 
-  if (!content) {
-    return json(400, { ok: false, error: "content is required" })
+  if (!content && !attachmentUrl) {
+    return json(400, { ok: false, error: "content or attachment_url is required" })
   }
 
   const { data: session, error: sessionError } = await supabase
@@ -109,6 +113,8 @@ serve(async (req) => {
       session_id: session.id,
       role: "user",
       content,
+      attachment_url: attachmentUrl,
+      attachment_type: attachmentType,
     })
     .select("*")
     .single()

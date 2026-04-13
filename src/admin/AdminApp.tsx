@@ -5,6 +5,7 @@ import SiteHeader from "./components/SiteHeader"
 import { SpurPanel } from "./spur/SpurPanel"
 import AccountPanel from "./components/AccountPanel"
 import SiteSettingsPanel from "./components/SiteSettingsPanel"
+import { CodexPanel } from "./codex/CodexPanel"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -64,7 +65,7 @@ type SpurAuthorAccess = {
   can_schedule: boolean
 }
 
-type AppKey = "spur" | "docs" | "forum"
+type AppKey = "spur" | "docs" | "forum" | "codex"
 
 type NavSelection =
   | { kind: "site"; siteId: string }
@@ -77,6 +78,7 @@ type NavSelection =
   | { kind: "usage" }
   | { kind: "chatterbox" }
   | { kind: "holster" }
+  | { kind: "codex" }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -86,6 +88,7 @@ const APP_META: Record<AppKey, { label: string; color: string }> = {
   spur:  { label: "Blog",  color: "#b45309" },
   docs:  { label: "Docs",  color: "#0e7490" },
   forum: { label: "Forum", color: "#7c3aed" },
+  codex: { label: "Codex", color: "#7c6af7" },
 }
 
 const SB = {
@@ -394,6 +397,7 @@ function Sidebar({ ownedSites, sharedSpurSites, profile, plan, selection, onSele
             <div style={{ padding: "16px 16px 8px", fontSize: 11, fontWeight: 700, color: SB.textDim, letterSpacing: "0.08em", textTransform: "uppercase" }}>Tools</div>
             {sidebarNavItem("chatterbox", "Chatterbox")}
             {sidebarNavItem("holster", "Holster")}
+            {sidebarNavItem("codex", "Codex")}
           </div>
 
           <div style={{ borderTop: `1px solid ${SB.border}`, padding: "10px 16px", flexShrink: 0, display: "flex", alignItems: "center", gap: 10 }}>
@@ -703,6 +707,10 @@ export default function App() {
     if (selection.kind === "usage") return <StubView title="Usage" />
     if (selection.kind === "chatterbox") return <StubView title="Chatterbox" />
     if (selection.kind === "holster") return <StubView title="Holster" />
+    if (selection.kind === "codex") {
+      const defaultSite = ownedSites[0] ?? null
+      return defaultSite ? <CodexPanel userId={session.user.id} siteId={defaultSite.id} supabase={supabase} /> : <StubView title="Codex" />
+    }
 
     return null
   }

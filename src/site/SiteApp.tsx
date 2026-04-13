@@ -7,6 +7,7 @@ import SiteFooter from './components/SiteFooter'
 import BlogIndex from './pages/BlogIndex'
 import BlogPost from './pages/BlogPost'
 import SerialPage from './pages/SerialPage'
+import CodexIndex from './pages/CodexIndex'
 import NotFound from './pages/NotFound'
 import { getSupabase } from './supabase'
 import './themes/spur/spur.css'
@@ -33,7 +34,7 @@ function App() {
   }, [darkMode])
 
   const site: Site | null =
-    data && data.type !== 'not_found' ? data.site : null
+    data && data.type !== 'not_found' && 'site' in data ? data.site : null
 
   // RSS autodiscovery
   useEffect(() => {
@@ -123,6 +124,7 @@ function App() {
       case 'blog_index': return <BlogIndex data={data} onNavigate={devNavigate} darkMode={darkMode} onPrefetch={prefetchRoute} />
       case 'blog_post':  return <BlogPost data={data} onNavigate={devNavigate} darkMode={darkMode} onAuthRequired={() => setShowAuth(true)} />
       case 'serial_page': return <SerialPage data={data} onNavigate={devNavigate} darkMode={darkMode} />
+      case 'codex_index': return <CodexIndex data={data} onNavigate={devNavigate} />
       case 'not_found':
       default:           return <NotFound />
     }

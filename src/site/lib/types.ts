@@ -92,12 +92,7 @@ export interface ContentMeta {
   has_audio?: boolean
 }
 
-// site_router response shapes
-export type RouterResponse =
-  | BlogIndexResponse
-  | BlogPostResponse
-  | SerialPageResponse
-  | NotFoundResponse
+// site_router response shapes — defined after all response interfaces below
 
 export interface BlogIndexResponse {
   type: 'blog_index'
@@ -127,3 +122,40 @@ export interface SerialPageResponse {
 export interface NotFoundResponse {
   type: 'not_found'
 }
+
+// ── Codex types ───────────────────────────────────────────────
+
+export interface CodexSummary {
+  id: string
+  name: string
+  slug: string
+  short_code: string
+  description: string | null
+}
+
+export interface CodexEntry {
+  id: string
+  codex_id: string
+  parent_id: string | null
+  node_type: 'node' | 'anchor'
+  display_label: string | null
+  title: string | null
+  content: string | null
+  sort_order: number
+  reference_code: string | null
+}
+
+export interface CodexIndexResponse {
+  type: 'codex_index'
+  site: Site
+  codices: CodexSummary[]
+  entries: CodexEntry[]
+}
+
+// ── RouterResponse ────────────────────────────────────────────
+export type RouterResponse =
+  | BlogIndexResponse
+  | BlogPostResponse
+  | SerialPageResponse
+  | CodexIndexResponse
+  | NotFoundResponse

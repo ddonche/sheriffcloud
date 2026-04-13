@@ -405,6 +405,7 @@ function HomePage({
   canCreateBlog: boolean
 }) {
   const [activeFilters, setActiveFilters] = useState<Set<ContentMeta>>(new Set())
+  const [heroCollapsed, setHeroCollapsed] = useState(false)
 
   const availableTypes = useMemo(
     () => META_TYPES.filter((type) => posts.some((post) => post.contentMeta.includes(type))),
@@ -441,232 +442,357 @@ function HomePage({
       />
 
       <main>
-        <section
-          style={{
-            maxWidth: 1180,
-            margin: "0 auto",
-            padding: "64px 24px 28px",
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 1.15fr) minmax(320px, 0.85fr)",
-            gap: 28,
-            alignItems: "stretch",
-          }}
-        >
-          <div
+        {heroCollapsed ? (
+          <section
+            onClick={() => setHeroCollapsed(false)}
             style={{
-              background: `linear-gradient(180deg, rgba(242,145,6,0.06) 0%, rgba(242,145,6,0.02) 100%)`,
-              border: `1px solid ${C.borderLight}`,
-              borderRadius: 18,
-              padding: "30px 28px",
+              maxWidth: 1180,
+              margin: "0 auto",
+              padding: "24px 24px 12px",
+              cursor: "pointer",
             }}
           >
             <div
               style={{
-                display: "inline-flex",
+                background: C.surface,
+                border: `1px solid ${C.borderLight}`,
+                borderRadius: 18,
+                padding: "16px 18px",
+                display: "flex",
                 alignItems: "center",
-                gap: 8,
-                fontSize: 12,
-                fontWeight: 700,
-                fontFamily: FONT_MONO,
-                color: C.accent,
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-                marginBottom: 14,
+                justifyContent: "space-between",
+                gap: 18,
+                flexWrap: "wrap",
               }}
             >
-              <span>Discovery-first blogging</span>
-            </div>
-
-            <h1
-              style={{
-                fontSize: "clamp(40px, 7vw, 70px)",
-                lineHeight: 0.95,
-                letterSpacing: "-0.06em",
-                fontWeight: 900,
-                color: C.text,
-                marginBottom: 18,
-              }}
-            >
-              Write.
-              <br />
-              Get seen.
-              <br />
-              Build your hub.
-            </h1>
-
-            <p
-              style={{
-                fontSize: 18,
-                lineHeight: 1.75,
-                color: C.muted,
-                maxWidth: 650,
-                marginBottom: 22,
-              }}
-            >
-              Spur is a clean blogging platform with built-in discovery. Publish posts people
-              actually want to click, then bring them back to your site, your docs, your
-              forum, and your world.
-            </p>
-
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 22 }}>
-              <button
-                type="button"
-                onClick={onStartWriting}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  background: C.accent,
-                  color: "#fff",
-                  borderRadius: 10,
-                  padding: "13px 18px",
-                  fontSize: 14,
-                  fontWeight: 800,
-                  border: "none",
-                }}
-              >
-                Start Writing
-              </button>
-              <a
-                href="#discover"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  background: C.surface,
-                  color: C.text,
-                  border: `1px solid ${C.border}`,
-                  borderRadius: 10,
-                  padding: "13px 18px",
-                  fontSize: 14,
-                  fontWeight: 700,
-                }}
-              >
-                Explore Discover
-              </a>
-            </div>
-
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-              {[
-                "Content-aware previews",
-                "Zero paywalls in discovery",
-                "Your blog stays yours",
-              ].map((item) => (
-                <span
-                  key={item}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 8,
-                    padding: "9px 11px",
-                    borderRadius: 999,
-                    background: C.surface,
-                    border: `1px solid ${C.borderLight}`,
-                    fontSize: 13,
-                    fontWeight: 700,
-                    color: C.muted,
-                  }}
-                >
-                  <span
+              <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
+                  <div
                     style={{
-                      width: 7,
-                      height: 7,
-                      borderRadius: "50%",
-                      background: C.accent,
-                      display: "inline-block",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      fontFamily: FONT_MONO,
+                      color: C.accent,
+                      letterSpacing: "0.08em",
+                      textTransform: "uppercase",
                     }}
-                  />
-                  {item}
-                </span>
-              ))}
-            </div>
-          </div>
+                  >
+                    Discovery-first blogging
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 18,
+                      fontWeight: 800,
+                      lineHeight: 1.1,
+                      letterSpacing: "-0.03em",
+                      color: C.text,
+                    }}
+                  >
+                    Write. Get seen. Build your hub.
+                  </div>
+                </div>
 
-          <div
-            style={{
-              background: C.surface,
-              border: `1px solid ${C.borderLight}`,
-              borderRadius: 18,
-              padding: "22px 20px",
-              display: "flex",
-              flexDirection: "column",
-              gap: 18,
-            }}
-          >
-            <div>
+                <div
+                  style={{
+                    width: 1,
+                    alignSelf: "stretch",
+                    background: C.borderLight,
+                    minHeight: 46,
+                  }}
+                />
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 700,
+                      fontFamily: FONT_MONO,
+                      color: C.accent,
+                      letterSpacing: "0.08em",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    Why Spur
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 18,
+                      fontWeight: 800,
+                      lineHeight: 1.1,
+                      letterSpacing: "-0.03em",
+                      color: C.text,
+                    }}
+                  >
+                    Better discovery without turning your blog into platform sludge.
+                  </div>
+                </div>
+              </div>
+
               <div
                 style={{
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: C.accent,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Learn more
+              </div>
+            </div>
+          </section>
+        ) : (
+          <section
+            onClick={() => setHeroCollapsed(true)}
+            style={{
+              maxWidth: 1180,
+              margin: "0 auto",
+              padding: "64px 24px 28px",
+              display: "grid",
+              gridTemplateColumns: "minmax(0, 1.15fr) minmax(320px, 0.85fr)",
+              gap: 28,
+              alignItems: "stretch",
+              cursor: "pointer",
+              position: "relative",
+            }}
+          >
+            <div
+              style={{
+                background: `linear-gradient(180deg, rgba(242,145,6,0.06) 0%, rgba(242,145,6,0.02) 100%)`,
+                border: `1px solid ${C.borderLight}`,
+                borderRadius: 18,
+                padding: "30px 28px",
+              }}
+            >
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
                   fontSize: 12,
                   fontWeight: 700,
                   fontFamily: FONT_MONO,
                   color: C.accent,
                   letterSpacing: "0.08em",
                   textTransform: "uppercase",
-                  marginBottom: 8,
+                  marginBottom: 14,
                 }}
               >
-                Why Spur
+                <span>Discovery-first blogging</span>
               </div>
-              <div
+
+              <h1
                 style={{
-                  fontSize: 24,
-                  fontWeight: 800,
-                  lineHeight: 1.15,
-                  letterSpacing: "-0.04em",
-                  marginBottom: 10,
+                  fontSize: "clamp(40px, 7vw, 70px)",
+                  lineHeight: 0.95,
+                  letterSpacing: "-0.06em",
+                  fontWeight: 900,
+                  color: C.text,
+                  marginBottom: 18,
                 }}
               >
-                Better discovery without turning your blog into platform sludge.
+                Write.
+                <br />
+                Get seen.
+                <br />
+                Build your hub.
+              </h1>
+
+              <p
+                style={{
+                  fontSize: 18,
+                  lineHeight: 1.75,
+                  color: C.muted,
+                  maxWidth: 650,
+                  marginBottom: 22,
+                }}
+              >
+                Spur is a clean blogging platform with built-in discovery. Publish posts people
+                actually want to click, then bring them back to your site, your docs, your
+                forum, and your world.
+              </p>
+
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 22 }}>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onStartWriting()
+                  }}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    background: C.accent,
+                    color: "#fff",
+                    borderRadius: 10,
+                    padding: "13px 18px",
+                    fontSize: 14,
+                    fontWeight: 800,
+                    border: "none",
+                  }}
+                >
+                  Start Writing
+                </button>
+                <a
+                  href="#discover"
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    background: C.surface,
+                    color: C.text,
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 10,
+                    padding: "13px 18px",
+                    fontSize: 14,
+                    fontWeight: 700,
+                  }}
+                >
+                  Explore Discover
+                </a>
               </div>
-              <div style={{ fontSize: 15, lineHeight: 1.7, color: C.muted }}>
-                Posts stay on your site. Discovery lives on Spur. Readers click through, find
-                your world, and can go deeper into everything else you build.
+
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+                {[
+                  "Content-aware previews",
+                  "Zero paywalls in discovery",
+                  "Your blog stays yours",
+                ].map((item) => (
+                  <span
+                    key={item}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 8,
+                      padding: "9px 11px",
+                      borderRadius: 999,
+                      background: C.surface,
+                      border: `1px solid ${C.borderLight}`,
+                      fontSize: 13,
+                      fontWeight: 700,
+                      color: C.muted,
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 7,
+                        height: 7,
+                        borderRadius: "50%",
+                        background: C.accent,
+                        display: "inline-block",
+                      }}
+                    />
+                    {item}
+                  </span>
+                ))}
               </div>
             </div>
 
-            <div style={{ display: "grid", gap: 10 }}>
-              {[
-                {
-                  title: "See what’s inside",
-                  text: "Posts show code, audio, image, video, and more before the click.",
-                },
-                {
-                  title: "Filter instantly",
-                  text: "Readers can narrow the feed by the content types they actually want.",
-                },
-                {
-                  title: "Bring people home",
-                  text: "Your blog is the doorway into your docs, forum, and community.",
-                },
-              ].map((item) => (
+            <div
+              style={{
+                background: C.surface,
+                border: `1px solid ${C.borderLight}`,
+                borderRadius: 18,
+                padding: "22px 20px",
+                display: "flex",
+                flexDirection: "column",
+                gap: 18,
+              }}
+            >
+              <div>
                 <div
-                  key={item.title}
                   style={{
-                    padding: "14px 14px 12px",
-                    borderRadius: 12,
-                    border: `1px solid ${C.borderLight}`,
-                    background: "rgba(255,255,255,0.01)",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    fontFamily: FONT_MONO,
+                    color: C.accent,
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase",
+                    marginBottom: 8,
                   }}
                 >
+                  Why Spur
+                </div>
+                <div
+                  style={{
+                    fontSize: 24,
+                    fontWeight: 800,
+                    lineHeight: 1.15,
+                    letterSpacing: "-0.04em",
+                    marginBottom: 10,
+                  }}
+                >
+                  Better discovery without turning your blog into platform sludge.
+                </div>
+                <div style={{ fontSize: 15, lineHeight: 1.7, color: C.muted }}>
+                  Posts stay on your site. Discovery lives on Spur. Readers click through, find
+                  your world, and can go deeper into everything else you build.
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gap: 10 }}>
+                {[
+                  {
+                    title: "See what’s inside",
+                    text: "Posts show code, audio, image, video, and more before the click.",
+                  },
+                  {
+                    title: "Filter instantly",
+                    text: "Readers can narrow the feed by the content types they actually want.",
+                  },
+                  {
+                    title: "Bring people home",
+                    text: "Your blog is the doorway into your docs, forum, and community.",
+                  },
+                ].map((item) => (
                   <div
+                    key={item.title}
                     style={{
-                      fontSize: 15,
-                      fontWeight: 800,
-                      color: C.text,
-                      marginBottom: 4,
-                      letterSpacing: "-0.02em",
+                      padding: "14px 14px 12px",
+                      borderRadius: 12,
+                      border: `1px solid ${C.borderLight}`,
+                      background: "rgba(255,255,255,0.01)",
                     }}
                   >
-                    {item.title}
+                    <div
+                      style={{
+                        fontSize: 15,
+                        fontWeight: 800,
+                        color: C.text,
+                        marginBottom: 4,
+                        letterSpacing: "-0.02em",
+                      }}
+                    >
+                      {item.title}
+                    </div>
+                    <div style={{ fontSize: 14, lineHeight: 1.65, color: C.muted }}>
+                      {item.text}
+                    </div>
                   </div>
-                  <div style={{ fontSize: 14, lineHeight: 1.65, color: C.muted }}>
-                    {item.text}
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-        </section>
+
+            <div
+              style={{
+                position: "absolute",
+                right: 24,
+                top: 22,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                fontSize: 12,
+                fontWeight: 700,
+                fontFamily: FONT,
+                color: C.dim,
+                pointerEvents: "none",
+              }}
+            >
+              <span>Click anywhere to collapse</span>
+            </div>
+          </section>
+        )}
 
         <section id="discover" style={{ maxWidth: 1180, margin: "0 auto", padding: "8px 24px 64px" }}>
           <div
