@@ -12,6 +12,19 @@ import { SpurPostEditor } from "./spur/SpurPostEditor"
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type ContentMeta = "image" | "video" | "code" | "file" | "link" | "audio"
+type DiscoveryCategory =
+  | "technology"
+  | "business"
+  | "culture"
+  | "society"
+  | "politics"
+  | "science"
+  | "health"
+  | "life"
+  | "philosophy"
+  | "history"
+  | "art"
+  | "fiction"
 
 type SpurPost = {
   id: string
@@ -23,6 +36,7 @@ type SpurPost = {
   comments: number
   likes: number
   contentMeta: ContentMeta[]
+  category: DiscoveryCategory
 }
 
 // ── Mock data ─────────────────────────────────────────────────────────────────
@@ -40,6 +54,7 @@ const MOCK_POSTS: SpurPost[] = [
     comments: 14,
     likes: 87,
     contentMeta: ["code", "image"],
+    category: "technology",
   },
   {
     id: "2",
@@ -52,6 +67,7 @@ const MOCK_POSTS: SpurPost[] = [
     comments: 6,
     likes: 42,
     contentMeta: ["image", "link"],
+    category: "business",
   },
   {
     id: "3",
@@ -64,6 +80,7 @@ const MOCK_POSTS: SpurPost[] = [
     comments: 19,
     likes: 76,
     contentMeta: ["code"],
+    category: "technology",
   },
   {
     id: "4",
@@ -76,6 +93,7 @@ const MOCK_POSTS: SpurPost[] = [
     comments: 23,
     likes: 130,
     contentMeta: ["image", "video"],
+    category: "art",
   },
   {
     id: "5",
@@ -88,6 +106,7 @@ const MOCK_POSTS: SpurPost[] = [
     comments: 9,
     likes: 54,
     contentMeta: ["audio", "image"],
+    category: "art",
   },
   {
     id: "6",
@@ -100,6 +119,7 @@ const MOCK_POSTS: SpurPost[] = [
     comments: 11,
     likes: 61,
     contentMeta: [],
+    category: "culture",
   },
 ]
 
@@ -138,6 +158,21 @@ const META_COLORS: Record<ContentMeta, string> = {
 }
 
 const META_TYPES: ContentMeta[] = ["image", "video", "code", "file", "link", "audio"]
+const DISCOVERY_CATEGORIES: Array<{ value: "all" | DiscoveryCategory; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "technology", label: "Technology" },
+  { value: "business", label: "Business" },
+  { value: "culture", label: "Culture" },
+  { value: "society", label: "Society" },
+  { value: "politics", label: "Politics" },
+  { value: "science", label: "Science" },
+  { value: "health", label: "Health" },
+  { value: "life", label: "Life" },
+  { value: "philosophy", label: "Philosophy" },
+  { value: "history", label: "History" },
+  { value: "art", label: "Art" },
+  { value: "fiction", label: "Fiction" },
+]
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -234,6 +269,8 @@ function FilterChip({
         fontWeight: 700,
         fontFamily: FONT,
         transition: "all 0.15s ease",
+        flex: "0 0 auto",
+        whiteSpace: "nowrap",
       }}
     >
       {icon ? <Icon name={icon} size={15} color={active ? C.accent : META_COLORS[icon]} /> : null}
@@ -406,19 +443,32 @@ function HomePage({
 }) {
   const [activeFilters, setActiveFilters] = useState<Set<ContentMeta>>(new Set())
   const [heroCollapsed, setHeroCollapsed] = useState(false)
+  const [activeCategory, setActiveCategory] = useState<"all" | DiscoveryCategory>("all")
 
   const availableTypes = useMemo(
     () => META_TYPES.filter((type) => posts.some((post) => post.contentMeta.includes(type))),
     [posts]
   )
 
-  const filteredPosts = useMemo(() => {
-    if (activeFilters.size === 0) return posts
-    return posts.filter((post) => [...activeFilters].every((type) => post.contentMeta.includes(type)))
-  }, [posts, activeFilters])
+  const categoryFilteredPosts = useMemo(() => {
+    if (activeCategory === "all") return posts
+    return posts.filter((post) => post.category === activeCategory)
+  }, [posts, activeCategory])
 
-  const featured = filteredPosts[0] ?? null
-  const rest = filteredPosts.slice(1)
+  const filteredPosts = useMemo(() => {
+    if (activeFilters.size === 0) return categoryFilteredPosts
+    return categoryFilteredPosts.filter((post) =>
+      [...activeFilters].every((type) => post.contentMeta.includes(type))
+    )
+  }, [categoryFilteredPosts, activeFilters])
+
+  const featuredPosts = filteredPosts.slice(0, 3)
+  const featured = featuredPosts[0] ?? null
+  const featureSide = featuredPosts.slice(1)
+  const rest = filteredPosts.slice(3)
+
+  const activeCategoryLabel =
+    DISCOVERY_CATEGORIES.find((category) => category.value === activeCategory)?.label ?? "All"
 
   function toggleFilter(type: ContentMeta) {
     setActiveFilters((prev) => {
@@ -458,15 +508,22 @@ function HomePage({
                 border: `1px solid ${C.borderLight}`,
                 borderRadius: 18,
                 padding: "16px 18px",
-                display: "flex",
+                display: "grid",
+                gridTemplateColumns: "minmax(0, 1fr) auto",
+                gap: 16,
                 alignItems: "center",
-                justifyContent: "space-between",
-                gap: 18,
-                flexWrap: "wrap",
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", flex: 1, minWidth: 0 }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
+              <div
+                className="spur-collapsed-hero__content"
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+                  gap: 18,
+                  minWidth: 0,
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
                   <div
                     style={{
                       fontSize: 12,
@@ -475,6 +532,7 @@ function HomePage({
                       color: C.accent,
                       letterSpacing: "0.08em",
                       textTransform: "uppercase",
+                      marginBottom: 6,
                     }}
                   >
                     Discovery-first blogging
@@ -493,15 +551,23 @@ function HomePage({
                 </div>
 
                 <div
+                  className="spur-collapsed-hero__divider"
                   style={{
-                    width: 1,
-                    alignSelf: "stretch",
-                    background: C.borderLight,
-                    minHeight: 46,
+                    position: "relative",
+                    minWidth: 0,
+                    paddingLeft: 18,
                   }}
-                />
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
+                >
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: 1,
+                      background: C.borderLight,
+                    }}
+                  />
                   <div
                     style={{
                       fontSize: 12,
@@ -510,6 +576,7 @@ function HomePage({
                       color: C.accent,
                       letterSpacing: "0.08em",
                       textTransform: "uppercase",
+                      marginBottom: 6,
                     }}
                   >
                     Why Spur
@@ -529,11 +596,13 @@ function HomePage({
               </div>
 
               <div
+                className="spur-collapsed-hero__learn-more"
                 style={{
                   fontSize: 13,
                   fontWeight: 700,
                   color: C.accent,
                   whiteSpace: "nowrap",
+                  alignSelf: "center",
                 }}
               >
                 Learn more
@@ -794,7 +863,53 @@ function HomePage({
           </section>
         )}
 
-        <section id="discover" style={{ maxWidth: 1180, margin: "0 auto", padding: "8px 24px 64px" }}>
+        <section
+          style={{
+            position: "sticky",
+            top: 0,
+            zIndex: 5,
+            background: "rgba(8,14,26,0.92)",
+            backdropFilter: "blur(10px)",
+            borderTop: `1px solid ${C.borderLight}`,
+            borderBottom: `1px solid ${C.borderLight}`,
+          }}
+        >
+          <div
+            className="spur-category-rail"
+            onWheel={(e) => {
+              const el = e.currentTarget
+              if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+                el.scrollLeft += e.deltaY
+                e.preventDefault()
+              }
+            }}
+            style={{
+              maxWidth: 1180,
+              margin: "0 auto",
+              padding: "12px 24px",
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              overflowX: "auto",
+              overflowY: "hidden",
+              flexWrap: "nowrap",
+              scrollbarWidth: "none",
+              WebkitOverflowScrolling: "touch",
+              cursor: "grab",
+            }}
+          >
+            {DISCOVERY_CATEGORIES.map((category) => (
+              <FilterChip
+                key={category.value}
+                label={category.label}
+                active={activeCategory === category.value}
+                onClick={() => setActiveCategory(category.value)}
+              />
+            ))}
+          </div>
+        </section>
+
+        <section id="discover" style={{ maxWidth: 1180, margin: "0 auto", padding: "20px 24px 64px" }}>
           <div
             style={{
               display: "flex",
@@ -817,7 +932,7 @@ function HomePage({
                   marginBottom: 6,
                 }}
               >
-                Discover on Spur
+                {activeCategory === "all" ? "Discover on Spur" : `${activeCategoryLabel} on Spur`}
               </div>
               <h2
                 style={{
@@ -852,21 +967,64 @@ function HomePage({
 
           {featured ? (
             <>
-              <div style={{ marginBottom: 18 }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "minmax(0, 1.35fr) minmax(280px, 0.65fr)",
+                  gap: 16,
+                  marginBottom: 18,
+                }}
+              >
                 <PostCard post={featured} featured />
+
+                <div style={{ display: "grid", gap: 16 }}>
+                  {featureSide.map((post) => (
+                    <PostCard key={post.id} post={post} />
+                  ))}
+                </div>
               </div>
 
               <div
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
                   gap: 16,
+                  flexWrap: "wrap",
+                  marginBottom: 14,
                 }}
               >
-                {rest.map((post) => (
-                  <PostCard key={post.id} post={post} />
-                ))}
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    fontFamily: FONT_MONO,
+                    color: C.accent,
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  More from {activeCategoryLabel}
+                </div>
+
+                <div style={{ fontSize: 12, color: C.dim }}>
+                  {filteredPosts.length} post{filteredPosts.length === 1 ? "" : "s"}
+                </div>
               </div>
+
+              {rest.length > 0 ? (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+                    gap: 16,
+                  }}
+                >
+                  {rest.map((post) => (
+                    <PostCard key={post.id} post={post} />
+                  ))}
+                </div>
+              ) : null}
             </>
           ) : (
             <div
@@ -1161,14 +1319,130 @@ function SpurAppRoutes() {
         body { background: ${C.bg}; }
         a { text-decoration: none; color: inherit; }
         button { font: inherit; cursor: pointer; }
-        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: ${C.border}; border-radius: 3px; }
+
+        .spur-category-rail {
+          scrollbar-width: none;
+        }
+
+        .spur-category-rail::-webkit-scrollbar {
+          display: none;
+        }
+
+        .spur-category-rail > button {
+          flex: 0 0 auto;
+        }
+
+        @media (min-width: 1181px) {
+          .spur-category-rail {
+            display: grid !important;
+            grid-template-columns: repeat(13, minmax(0, 1fr)) !important;
+            overflow: visible !important;
+            cursor: default !important;
+          }
+
+          .spur-category-rail > button {
+            width: 100%;
+            min-width: 0;
+            justify-content: center;
+          }
+        }
+
+        @media (max-width: 1180px) {
+          .spur-category-rail {
+            display: flex !important;
+            flex-wrap: nowrap !important;
+            overflow-x: auto !important;
+            overflow-y: hidden !important;
+            -webkit-overflow-scrolling: touch;
+          }
+
+          .spur-category-rail > button {
+            flex: 0 0 auto;
+          }
+        }
+
         @media (max-width: 900px) {
           section[style*="grid-template-columns"] { grid-template-columns: 1fr !important; }
         }
+
         @media (max-width: 640px) {
           header > div { padding-left: 16px !important; padding-right: 16px !important; }
+
+          .spur-category-rail {
+            padding-left: 16px !important;
+            padding-right: 16px !important;
+            gap: 8px !important;
+          }
+
+          .spur-collapsed-hero__content {
+            grid-template-columns: 1fr !important;
+            gap: 14px !important;
+          }
+
+          .spur-collapsed-hero__divider {
+            padding-left: 0 !important;
+            padding-top: 14px !important;
+          }
+
+          .spur-collapsed-hero__divider > div:first-child {
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: auto !important;
+            width: auto !important;
+            height: 1px !important;
+          }
+
+          .spur-collapsed-hero__learn-more {
+            grid-column: 1 / -1;
+            justify-self: start;
+            padding-top: 2px;
+          }
+        }
+        /* ───────────────── HEADER MOBILE FIX ───────────────── */
+
+        @media (max-width: 900px) {
+          header > div {
+            height: auto !important;
+            flex-direction: column !important;
+            align-items: stretch !important;
+            padding-top: 10px !important;
+            padding-bottom: 10px !important;
+            gap: 10px !important;
+          }
+
+          .spur-header__nav {
+            width: 100%;
+            justify-content: flex-start !important;
+            flex-wrap: nowrap !important;
+            overflow-x: auto;
+            overflow-y: hidden;
+            -webkit-overflow-scrolling: touch;
+            padding-bottom: 4px;
+          }
+
+          .spur-header__nav::-webkit-scrollbar {
+            display: none;
+          }
+
+          .spur-header__item {
+            flex: 0 0 auto;
+            white-space: nowrap;
+          }
+        }
+
+        @media (max-width: 640px) {
+          .spur-header__nav {
+            gap: 6px !important;
+          }
+
+          .spur-header__item {
+            padding: 8px 10px !important;
+            font-size: 13px !important;
+          }
         }
       `}</style>
 

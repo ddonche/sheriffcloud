@@ -95,13 +95,23 @@ export default function SpurHeader({
           gap: 24,
         }}
       >
-        <Link to="/spur" style={{ display: "inline-flex", alignItems: "center" }} aria-label="Spur home">
+        <Link to="/spur" className="spur-header__item" style={{ display: "inline-flex", alignItems: "center" }} aria-label="Spur home">
           <img src="/spur-logo.png" alt="Spur" style={{ height: 52, width: "auto", display: "block" }} />
         </Link>
 
-        <nav style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <nav
+          className="spur-header__nav"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            flexWrap: "wrap",
+            justifyContent: "flex-end",
+          }}
+        >
           <Link
             to="/spur/about"
+            className="spur-header__item"
             style={{
               fontSize: 14,
               fontWeight: 600,
@@ -118,6 +128,7 @@ export default function SpurHeader({
 
           <Link
             to="/spur/pricing"
+            className="spur-header__item"
             style={{
               fontSize: 14,
               fontWeight: 600,

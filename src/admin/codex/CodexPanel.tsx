@@ -215,6 +215,12 @@ export function CodexPanel({ userId, siteId, supabase }: { userId: string; siteI
   const [newCodexDesc, setNewCodexDesc] = useState("")
   const [newCodexSaving, setNewCodexSaving] = useState(false)
   const [newCodexError, setNewCodexError] = useState<string | null>(null)
+  const [newCodexSiteId, setNewCodexSiteId] = useState(siteId)
+  const [sites, setSites] = useState<{ id: string; name: string; subdomain: string }[]>([])
+
+  useEffect(() => {
+    supabase.from("sites").select("id, name, subdomain").eq("owner_id", userId).then(({ data }: any) => setSites(data ?? []))
+  }, [userId])
 
   const theme = darkMode ? CODEX_DARK : CODEX_LIGHT
   const activeCodex = codices.find(c => c.id === activeCodexId) ?? null
@@ -232,7 +238,7 @@ export function CodexPanel({ userId, siteId, supabase }: { userId: string; siteI
 
   async function loadCodices() {
     setLoading(true)
-    const { data } = await supabase.from("codices").select("*").eq("site_id", siteId).order("created_at", { ascending: false })
+    const { data } = await supabase.from("codices").select("*").eq("owner_id", userId).order("created_at", { ascending: false })
     const list = data ?? []
     setCodices(list)
     if (list.length > 0) setActiveCodexId(list[0].id)
@@ -435,6 +441,13 @@ export function CodexPanel({ userId, siteId, supabase }: { userId: string; siteI
           <div onClick={() => setNewCodexOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(3px)" }} />
           <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)", zIndex: 201, width: 420, background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 12, padding: 28, boxShadow: "0 24px 64px rgba(0,0,0,0.6)" }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: theme.dim, letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: CODEXM, marginBottom: 20 }}>New Codex</div>
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: theme.dim, fontFamily: CODEXM, fontWeight: 500, marginBottom: 6 }}>Site</div>
+              <select value={newCodexSiteId} onChange={e => setNewCodexSiteId(e.target.value)}
+                style={{ width: "100%", background: theme.surface, border: "none", borderBottom: `1px solid ${theme.border}`, outline: "none", padding: "6px 0", fontSize: 14, fontWeight: 600, color: theme.text, fontFamily: CODEXF, boxSizing: "border-box", cursor: "pointer" }}>
+                {sites.map(s => <option key={s.id} value={s.id}>{s.name} ({s.subdomain})</option>)}
+              </select>
+            </div>
             <div style={{ marginBottom: 18 }}>
               <div style={{ fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: theme.dim, fontFamily: CODEXM, fontWeight: 500, marginBottom: 6 }}>Name</div>
               <input value={newCodexName} onChange={e => setNewCodexName(e.target.value)} placeholder="My Philosophy Codex…" autoFocus

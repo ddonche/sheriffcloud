@@ -29,6 +29,40 @@ const SectionIdNode = Node.create({
   },
 })
 
+const SectionCard = Node.create({
+  name: "sectionCard",
+  group: "block",
+  atom: true,
+  addAttributes() {
+    return {
+      anchorId:  { default: null },
+      label:     { default: "" },
+      text:      { default: "" },
+      citation:  { default: "" },
+    }
+  },
+  parseHTML() {
+    return [{ tag: "div[data-section-card]" }]
+  },
+  renderHTML({ HTMLAttributes }) {
+    return [
+      "div",
+      mergeAttributes({ "data-section-card": true, class: "codex-section-row" }, HTMLAttributes),
+      [
+        "span", { class: "codex-section-badge" }, `[${HTMLAttributes.label}]`
+      ],
+      [
+        "div", { class: "codex-section-body" },
+        ["div", { class: "codex-section-text" }, HTMLAttributes.text],
+        ["div", { class: "codex-section-cite" }, HTMLAttributes.citation],
+      ],
+      [
+        "button", { class: "codex-copy-btn", "data-citation": HTMLAttributes.citation, type: "button" }, "[[embed]]"
+      ],
+    ]
+  },
+})
+
 // ─── Toolbar helpers ──────────────────────────────────────────────────────────
 
 function TB({ onClick, active, title, children }: { onClick: () => void; active?: boolean; title: string; children: React.ReactNode }) {
@@ -157,6 +191,7 @@ export function CodexEditor({ entry, parentEntry, codex, supabase, onSaved, onAn
   const [pendingSelection, setPendingSelection] = useState<{ from: number; to: number; text: string } | null>(null)
   const [hasSelection, setHasSelection] = useState(false)
   const [popover, setPopover] = useState<{ nodeId: string; label: string; x: number; y: number } | null>(null)
+  const [cardPopover, setCardPopover] = useState<{ anchorId: string; text: string; pos: number; x: number; y: number } | null>(null)
 
   const canvasBg = darkMode ? "#0f0f1a" : "#fff"
   const canvasBorder = darkMode ? "#1e1e35" : "#ccc9bc"
@@ -168,6 +203,7 @@ export function CodexEditor({ entry, parentEntry, codex, supabase, onSaved, onAn
       Link.configure({ openOnClick: false }),
       Placeholder.configure({ placeholder: "Write the content of this section…" }),
       SectionIdNode,
+      SectionCard,
     ],
     content: entry.content ?? "",
     onSelectionUpdate({ editor }) {
@@ -176,9 +212,30 @@ export function CodexEditor({ entry, parentEntry, codex, supabase, onSaved, onAn
     },
   }, [entry.id])
 
-  // Handle clicks on badge spans in the rendered editor HTML
+  // Handle clicks on badge spans and section cards in the rendered editor HTML
   function handleEditorClick(e: React.MouseEvent) {
     const target = e.target as HTMLElement
+
+    // Click on section card
+    const card = target.closest("div[data-section-card]") as HTMLElement | null
+    if (card) {
+      e.preventDefault()
+      e.stopPropagation()
+      const anchorId = card.getAttribute("anchorid") ?? ""
+      const text = card.getAttribute("text") ?? ""
+      const rect = card.getBoundingClientRect()
+      // Find pos of this node in the editor
+      let cardPos = -1
+      editor?.state.doc.descendants((node, pos) => {
+        if (node.type.name === "sectionCard" && node.attrs.anchorId === anchorId) {
+          cardPos = pos
+          return false
+        }
+      })
+      if (cardPos >= 0) setCardPopover({ anchorId, text, pos: cardPos, x: rect.left, y: rect.top })
+      return
+    }
+
     const badge = target.closest("span[data-section-id]") as HTMLElement | null
     if (!badge) return
     e.preventDefault()
@@ -202,7 +259,14 @@ export function CodexEditor({ entry, parentEntry, codex, supabase, onSaved, onAn
     if (!editor || !pendingSelection) return
     setModalOpen(false)
 
-    const { to, text } = pendingSelection
+    const { from, to } = pendingSelection
+    // Get HTML of the selected range preserving inline formatting
+    const slice = editor.state.doc.slice(from, to)
+    const { DOMSerializer } = await import("prosemirror-model")
+    const serializer = DOMSerializer.fromSchema(editor.schema)
+    const container = document.createElement("div")
+    container.appendChild(serializer.serializeFragment(slice.content))
+    const text = container.innerHTML
 
     const siblings = await supabase
       .from("codex_entries")
@@ -229,10 +293,15 @@ export function CodexEditor({ entry, parentEntry, codex, supabase, onSaved, onAn
 
     if (e) { setError(e.message); return }
 
+    const citation = [codex.short_code, parentEntry?.display_label, entry.display_label, label].filter(Boolean).join('.')
+
     editor.chain()
       .focus()
-      .setTextSelection(to)
-      .insertContent({ type: "sectionId", attrs: { id: data.id, label } })
+      .deleteRange({ from, to })
+      .insertContentAt(from, {
+        type: "sectionCard",
+        attrs: { anchorId: data.id, label, text, citation },
+      })
       .run()
 
     onAnchorCreated(data)
@@ -276,6 +345,24 @@ export function CodexEditor({ entry, parentEntry, codex, supabase, onSaved, onAn
     })
   }
 
+  async function handleCardRemove(anchorId: string, text: string, _pos: number) {
+    setCardPopover(null)
+    // Delete from DB
+    await supabase.from("codex_entries").delete().eq("id", anchorId)
+    // Replace card node with plain paragraph containing the text
+    if (!editor) return
+    editor.state.doc.descendants((node, nodePos) => {
+      if (node.type.name === "sectionCard" && node.attrs.anchorId === anchorId) {
+        editor.chain()
+          .focus()
+          .deleteRange({ from: nodePos, to: nodePos + node.nodeSize })
+          .insertContentAt(nodePos, text || "<p></p>")
+          .run()
+        return false
+      }
+    })
+  }
+
   async function handleSave() {
     setSaving(true)
     setError(null)
@@ -307,6 +394,12 @@ export function CodexEditor({ entry, parentEntry, codex, supabase, onSaved, onAn
         .codex-editor .ProseMirror li { margin-bottom: 4px; }
         .codex-editor span[data-section-id] { display: inline-flex; align-items: center; background: ${theme.accentDim}; color: ${theme.accent}; font-family: ${CODEXM}; font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 4px; border: 1px solid ${theme.accent}44; cursor: pointer; user-select: none; margin: 0 1px 0 3px; letter-spacing: 0.03em; vertical-align: middle; transition: background 0.1s; }
         .codex-editor span[data-section-id]:hover { background: ${theme.accent}33; border-color: ${theme.accent}88; }
+        .codex-editor div[data-section-card] { display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; background: ${theme.surface}; border: 1px solid ${theme.border}; border-radius: 8px; margin: 8px 0; cursor: default; }
+        .codex-editor .codex-section-badge { font-size: 11px; font-family: ${CODEXM}; color: ${theme.accent}; background: ${theme.accentDim}; padding: 2px 7px; border-radius: 4px; flex-shrink: 0; margin-top: 2px; white-space: nowrap; }
+        .codex-editor .codex-section-body { flex: 1; min-width: 0; }
+        .codex-editor .codex-section-text { font-size: 14px; color: ${theme.text}; line-height: 1.6; }
+        .codex-editor .codex-section-cite { font-size: 11px; color: ${theme.muted}; font-family: ${CODEXM}; margin-top: 4px; }
+        .codex-editor .codex-copy-btn { padding: 4px 10px; border-radius: 5px; border: 1px solid ${theme.border}; background: transparent; color: ${theme.muted}; font-size: 11px; font-weight: 600; cursor: pointer; font-family: ${CODEXM}; flex-shrink: 0; white-space: nowrap; align-self: flex-start; }
       `}</style>
 
       {/* Top bar */}
@@ -357,6 +450,19 @@ export function CodexEditor({ entry, parentEntry, codex, supabase, onSaved, onAn
           onConfirm={handleModalConfirm}
           onCancel={() => { setModalOpen(false); setPendingSelection(null) }}
         />
+      )}
+
+      {cardPopover && (
+        <>
+          <div onClick={() => setCardPopover(null)} style={{ position: "fixed", inset: 0, zIndex: 200 }} />
+          <div style={{ position: "fixed", left: cardPopover.x, top: cardPopover.y - 48, zIndex: 201, background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 8, padding: "8px 12px", boxShadow: "0 8px 32px rgba(0,0,0,0.4)", display: "flex", gap: 8, alignItems: "center" }}>
+            <span style={{ fontSize: 11, color: theme.muted, fontFamily: CODEXF }}>Section</span>
+            <button onClick={() => handleCardRemove(cardPopover.anchorId, cardPopover.text, cardPopover.pos)}
+              style={{ padding: "4px 10px", borderRadius: 5, border: `1px solid ${theme.red}44`, background: theme.redDim, color: theme.red, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: CODEXF }}>
+              Remove
+            </button>
+          </div>
+        </>
       )}
 
       {popover && (
