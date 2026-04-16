@@ -18,13 +18,13 @@ export default function SiteFooter({ tier = 'free' }: Props) {
 
       {tier === 'free' && (
         <a
-          href="https://spur.sheriffcloud.com"
+          href="https://spur.ink"
           target="_blank"
           rel="noopener noreferrer"
           className="site-footer__badge"
         >
           <span className="site-footer__powered">Powered by</span>
-          <img src="/logo.png" alt="Spur" className="site-footer__logo" />
+          <img src="/spur-logo.png" alt="Spur" className="site-footer__logo" />
         </a>
       )}
     </footer>
