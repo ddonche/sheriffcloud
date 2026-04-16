@@ -3,11 +3,17 @@ import { Routes, Route, useNavigate, useParams, Link } from "react-router-dom"
 import { supabase } from "./supabase"
 import { AuthModal } from "./AuthModal"
 import PricingPage from "./PricingPage"
+import AboutPage from "./AboutPage"
+import ComingSoonPage from "./ComingSoonPage"
+import PrivacyPage from "./PrivacyPage"
+import TermsPage from "./TermsPage"
+import CookiePage from "./CookiePage"
 import SpurHeader from "./components/SpurHeader"
 import { Icon } from "./Icons"
 import { SpurPanel } from "./spur/SpurPanel"
 import CreateBlogModal from "./CreateBlogModal"
 import { SpurPostEditor } from "./spur/SpurPostEditor"
+import SpurFooter from "./components/SpurFooter"
 
 // ── Hooks ─────────────────────────────────────────────────────────────────────
 
@@ -59,6 +65,12 @@ type SpurPost = {
   author_avatar_url: string | null
 }
 
+type Subcategory = {
+  id: string
+  name: string
+  slug: string
+}
+
 type SortMode = "recent" | "hot"
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -69,7 +81,7 @@ const META_TYPES: ContentMeta[] = ["image", "video", "code", "file", "link", "au
 const FONT = `"DM Sans", "Inter", system-ui, sans-serif`
 const FONT_MONO = `"DM Mono", "Fira Code", monospace`
 
-const C = {
+const DARK_C = {
   bg: "#080e1a",
   surface: "#0d1525",
   surfaceHover: "#121d30",
@@ -88,6 +100,29 @@ const C = {
   blue: "#4a9eff",
   blueDim: "#4a9eff20",
 }
+
+const LIGHT_C = {
+  bg: "#f5f7fa",
+  surface: "#ffffff",
+  surfaceHover: "#eef1f6",
+  border: "#bfcfe8",
+  borderLight: "#d4e0f0",
+  text: "#0e1825",
+  muted: "#4a6a96",
+  dim: "#8aaace",
+  accent: "#d97c00",
+  accentHover: "#bf6d00",
+  accentDim: "rgba(217,124,0,0.08)",
+  green: "#16a34a",
+  greenDim: "rgba(22,163,74,0.1)",
+  yellow: "#ca8a04",
+  yellowDim: "rgba(202,138,4,0.1)",
+  blue: "#2563eb",
+  blueDim: "rgba(37,99,235,0.1)",
+}
+
+// C is set dynamically in SpurAppRoutes based on darkMode state
+let C = DARK_C
 
 const META_COLORS: Record<ContentMeta, string> = {
   image: "#4a9eff",
@@ -189,6 +224,45 @@ async function fetchParentSlugMap(categoryIds: string[]): Promise<Map<string, st
   return map
 }
 
+async function fetchSubcategories(parentSlug: string): Promise<Subcategory[]> {
+  const { data: parent } = await supabase
+    .from("spur_discovery_categories")
+    .select("id")
+    .eq("slug", parentSlug)
+    .is("parent_id", null)
+    .maybeSingle()
+
+  if (!parent) return []
+
+  const { data } = await supabase
+    .from("spur_discovery_categories")
+    .select("id, name, slug")
+    .eq("parent_id", parent.id)
+    .eq("is_active", true)
+    .order("sort_order", { ascending: true })
+
+  return data ?? []
+}
+
+async function fetchSubcategoryIds(parentSlug: string): Promise<string[]> {
+  const { data: parent } = await supabase
+    .from("spur_discovery_categories")
+    .select("id")
+    .eq("slug", parentSlug)
+    .is("parent_id", null)
+    .maybeSingle()
+
+  if (!parent) return []
+
+  const { data } = await supabase
+    .from("spur_discovery_categories")
+    .select("id")
+    .eq("parent_id", parent.id)
+    .eq("is_active", true)
+
+  return (data ?? []).map((r: any) => r.id)
+}
+
 function buildPosts(
   rows: any[],
   authorMap: Map<string, { display_name: string | null; avatar_url: string | null }>,
@@ -222,10 +296,11 @@ function buildPosts(
 
 async function fetchPosts(opts: {
   category: DiscoveryCategory | "all"
+  subcategoryId: string | null
   sort: SortMode
   offset: number
 }): Promise<SpurPost[]> {
-  const { data, error } = await supabase
+  let query = supabase
     .from("spur_posts")
     .select(`
       id,
@@ -248,19 +323,23 @@ async function fetchPosts(opts: {
     .order("published_at", { ascending: false })
     .range(opts.offset, opts.offset + PAGE_SIZE - 1)
 
-  if (error) throw new Error(error.message)
-
-  let rows = data ?? []
-  const categoryIds = [...new Set(rows.map((r: any) => r.discovery_category_id).filter(Boolean))] as string[]
-  const parentSlugMap = await fetchParentSlugMap(categoryIds)
-
-  if (opts.category !== "all") {
-    rows = rows.filter((r: any) => {
-      if (!r.discovery_category_id) return false
-      return parentSlugMap.get(r.discovery_category_id) === opts.category
-    })
+  if (opts.subcategoryId) {
+    query = query.eq("discovery_category_id", opts.subcategoryId)
+  } else if (opts.category !== "all") {
+    const subcatIds = await fetchSubcategoryIds(opts.category)
+    if (subcatIds.length > 0) {
+      query = query.in("discovery_category_id", subcatIds)
+    } else {
+      return []
+    }
   }
 
+  const { data, error } = await query
+  if (error) throw new Error(error.message)
+
+  const rows = data ?? []
+  const categoryIds = [...new Set(rows.map((r: any) => r.discovery_category_id).filter(Boolean))] as string[]
+  const parentSlugMap = await fetchParentSlugMap(categoryIds)
   const authorIds = [...new Set(rows.map((r: any) => r.author_id).filter(Boolean))] as string[]
   const authorMap = await fetchAuthorMap(authorIds)
   return buildPosts(rows, authorMap, parentSlugMap)
@@ -308,6 +387,8 @@ async function fetchFeaturedSerial(): Promise<{
   chapter_count: number
   site_subdomain: string
   site_origin: string
+  author_display_name: string | null
+  author_avatar_url: string | null
 } | null> {
   const { data, error } = await supabase
     .from("spur_serials")
@@ -317,6 +398,7 @@ async function fetchFeaturedSerial(): Promise<{
       tagline,
       slug,
       cover_image_url,
+      owner_id,
       sites!inner ( subdomain, site_origin )
     `)
     .in("status", ["ongoing", "completed"])
@@ -332,6 +414,12 @@ async function fetchFeaturedSerial(): Promise<{
     .eq("serial_id", data.id)
     .eq("status", "published")
 
+  const { data: authorProfile } = await supabase
+    .from("profiles")
+    .select("display_name, username, avatar_url")
+    .eq("id", (data as any).owner_id)
+    .maybeSingle()
+
   return {
     id:              data.id,
     slug:            data.slug,
@@ -341,6 +429,8 @@ async function fetchFeaturedSerial(): Promise<{
     chapter_count:   count ?? 0,
     site_subdomain:  (data.sites as any)?.subdomain ?? "",
     site_origin:     (data.sites as any)?.site_origin ?? "spur",
+    author_display_name: authorProfile?.display_name ?? authorProfile?.username ?? null,
+    author_avatar_url:   authorProfile?.avatar_url ?? null,
   }
 }
 
@@ -508,6 +598,98 @@ function TopCard({ post }: { post: SpurPost }) {
   )
 }
 
+// ── DiscoveryPostCard — matches PostCard layout from site-src ─────────────────
+
+function DiscoveryPostCard({ post }: { post: SpurPost }) {
+  const [hovered, setHovered] = useState(false)
+  return (
+    <a
+      href={postHref(post)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: "flex", flexDirection: "column",
+        background: hovered ? C.surfaceHover : C.surface,
+        border: `1px solid ${hovered ? C.border : C.borderLight}`,
+        borderRadius: 12, overflow: "hidden", cursor: "pointer",
+        transition: "background 0.12s, border-color 0.12s",
+        textDecoration: "none", color: "inherit",
+      }}
+    >
+      {/* Thumbnail */}
+      <div style={{ aspectRatio: "16/9", background: C.borderLight, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0, position: "relative" }}>
+        {post.thumbnail
+          ? <img src={post.thumbnail} alt={post.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} loading="lazy" />
+          : <ThumbPlaceholder size={32} />
+        }
+        {post.content_meta.length > 0 && (
+          <div style={{ position: "absolute", bottom: 8, left: 8, display: "flex", gap: 4 }}>
+            {post.content_meta.slice(0, 3).map((m) => (
+              <span key={m} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 26, height: 26, borderRadius: 6, background: "rgba(8,14,26,0.75)", backdropFilter: "blur(4px)" }}>
+                <Icon name={m} size={13} color={META_COLORS[m]} />
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Content */}
+      <div style={{ padding: "12px 14px 14px", display: "flex", flexDirection: "column", gap: 6, flex: 1 }}>
+        {/* Tags + meta icons row */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, minHeight: 20 }}>
+          {post.tags.length > 0 && (
+            <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+              {post.tags.slice(0, 3).map((t) => (
+                <span key={t} style={{ fontSize: 11, fontWeight: 700, color: C.muted, background: C.borderLight, borderRadius: 5, padding: "2px 6px", fontFamily: FONT_MONO }}>
+                  #{t}
+                </span>
+              ))}
+            </div>
+          )}
+          {post.content_meta.length > 0 && (
+            <div style={{ display: "flex", gap: 4, marginLeft: "auto" }}>
+              {post.content_meta.slice(0, 3).map((m) => (
+                <span key={m} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 22, height: 22, borderRadius: 5, background: META_COLORS[m] + "18" }}>
+                  <Icon name={m} size={12} color={META_COLORS[m]} />
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Title */}
+        <div style={{ fontSize: 15, fontWeight: 800, letterSpacing: "-0.025em", lineHeight: 1.25, color: C.text, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+          {post.title}
+        </div>
+
+        {/* Excerpt */}
+        {post.excerpt && (
+          <div style={{ fontSize: 13, lineHeight: 1.6, color: C.muted, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", flex: 1 }}>
+            {post.excerpt}
+          </div>
+        )}
+
+        {/* Footer */}
+        <div style={{ borderTop: `1px solid ${C.borderLight}`, paddingTop: 10, marginTop: "auto", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <AuthorChip displayName={post.author_display_name} avatarUrl={post.author_avatar_url} size="xs" />
+            <span style={{ width: 3, height: 3, borderRadius: "50%", background: C.dim, display: "inline-block" }} />
+            <span style={{ fontSize: 11, color: C.dim, fontFamily: FONT }}>
+              {new Date(post.published_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+            </span>
+            <span style={{ width: 3, height: 3, borderRadius: "50%", background: C.dim, display: "inline-block" }} />
+            <span style={{ fontSize: 11, color: C.dim, fontFamily: FONT }}>{post.reading_time_minutes} min read</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <StatChip icon="heart" value={post.like_count} accent />
+            <StatChip icon="comments" value={post.comment_count} />
+          </div>
+        </div>
+      </div>
+    </a>
+  )
+}
+
 // ── ListRowCard — thumb left, title/excerpt right, full-width footer ──────────
 
 function ListRowCard({ post }: { post: SpurPost }) {
@@ -528,12 +710,11 @@ function ListRowCard({ post }: { post: SpurPost }) {
         gap: 10,
       }}
     >
-      {/* Row 1: thumb + title/excerpt */}
-      <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-        <div style={{ width: 110, flexShrink: 0, borderRadius: 8, overflow: "hidden", alignSelf: "flex-start" }}>
+      <div style={{ display: "flex", gap: 12, alignItems: "stretch" }}>
+        <div style={{ width: 140, flexShrink: 0, borderRadius: 8, overflow: "hidden", alignSelf: "stretch" }}>
           {post.thumbnail
-            ? <img src={post.thumbnail} alt={post.title} style={{ width: "100%", height: "auto", display: "block" }} />
-            : <div style={{ width: 110, height: 72, background: C.borderLight, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8 }}><ThumbPlaceholder size={24} /></div>
+            ? <img src={post.thumbnail} alt={post.title} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+            : <div style={{ width: "100%", height: "100%", minHeight: 90, background: C.borderLight, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8 }}><ThumbPlaceholder size={24} /></div>
           }
         </div>
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 5 }}>
@@ -548,8 +729,6 @@ function ListRowCard({ post }: { post: SpurPost }) {
           )}
         </div>
       </div>
-
-      {/* Row 2: full-width footer */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, borderTop: `1px solid ${C.borderLight}`, paddingTop: 8, flexWrap: "wrap" }}>
         <AuthorChip displayName={post.author_display_name} avatarUrl={post.author_avatar_url} size="xs" />
         <span style={{ width: 3, height: 3, borderRadius: "50%", background: C.dim, display: "inline-block" }} />
@@ -645,7 +824,19 @@ function Sidebar({
                       {serial.tagline}
                     </div>
                   )}
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: "auto" }}>
+                  {serial.author_display_name && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: "auto" }}>
+                      {serial.author_avatar_url ? (
+                        <img src={serial.author_avatar_url} alt={serial.author_display_name} style={{ width: 18, height: 18, borderRadius: "50%", objectFit: "cover" }} />
+                      ) : (
+                        <span style={{ width: 18, height: 18, borderRadius: "50%", background: C.border, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700, color: C.muted, flexShrink: 0 }}>
+                          {serial.author_display_name[0].toUpperCase()}
+                        </span>
+                      )}
+                      <span style={{ fontSize: 11, fontWeight: 700, color: C.muted, fontFamily: FONT }}>{serial.author_display_name}</span>
+                    </div>
+                  )}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <div style={{ flex: 1, height: 3, background: C.borderLight, borderRadius: 99, overflow: "hidden" }}>
                       <div style={{ height: "100%", background: C.accent, width: "45%", borderRadius: 99 }} />
                     </div>
@@ -701,10 +892,11 @@ function Sidebar({
 
 // ── CategoryRail ──────────────────────────────────────────────────────────────
 
-function CategoryRail({ activeCategory }: { activeCategory: "all" | DiscoveryCategory }) {
+function CategoryRail({ activeCategory, darkMode }: { activeCategory: "all" | DiscoveryCategory; darkMode: boolean }) {
   const isMobile = useIsMobile()
+  const bg = darkMode ? "rgba(8,14,26,0.95)" : "rgba(245,247,250,0.95)"
   return (
-    <div style={{ position: "sticky", top: 0, zIndex: 10, background: "rgba(8,14,26,0.95)", backdropFilter: "blur(10px)", borderBottom: `1px solid ${C.borderLight}` }}>
+    <div style={{ position: "sticky", top: 0, zIndex: 10, background: bg, backdropFilter: "blur(10px)", borderBottom: `1px solid ${C.borderLight}` }}>
       <div
         onWheel={(e) => {
           const el = e.currentTarget
@@ -739,33 +931,99 @@ function CategoryRail({ activeCategory }: { activeCategory: "all" | DiscoveryCat
   )
 }
 
-// ── DiscoveryPage ─────────────────────────────────────────────────────────────
+// ── SubcategoryRail ───────────────────────────────────────────────────────────
 
-function DiscoveryPage({
-  category,
-  onStartWriting,
-  onNewPost,
-  onNewBlog,
-  onDashboard,
-  canCreateBlog,
+function SubcategoryRail({
+  subcategories,
+  activeSubcategorySlug,
+  categorySlug,
+  darkMode,
 }: {
-  category: "all" | DiscoveryCategory
-  onStartWriting: () => void
-  onNewPost: () => void
-  onNewBlog: () => void
-  onDashboard: () => void
-  canCreateBlog: boolean
+  subcategories: Subcategory[]
+  activeSubcategorySlug: string | null
+  categorySlug: string
+  darkMode: boolean
 }) {
-  const [sort, setSort] = useState<SortMode>("recent")
+  const isMobile = useIsMobile()
+  const bg = darkMode ? "rgba(8,14,26,0.95)" : "rgba(245,247,250,0.95)"
+  if (subcategories.length === 0) return null
+  return (
+    <div style={{ borderBottom: `1px solid ${C.borderLight}`, background: bg }}>
+      <div
+        onWheel={(e) => {
+          const el = e.currentTarget
+          if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { el.scrollLeft += e.deltaY; e.preventDefault() }
+        }}
+        style={{ maxWidth: 1180, margin: "0 auto", padding: "10px 24px", display: "flex", alignItems: "center", gap: 6, overflowX: "auto", overflowY: "hidden", flexWrap: "nowrap", scrollbarWidth: "none", WebkitOverflowScrolling: "touch" } as React.CSSProperties}
+      >
+        <Link
+          to={`/c/${categorySlug}`}
+          style={{
+            flex: isMobile ? "0 0 auto" : "1 1 0", display: "inline-flex", alignItems: "center", justifyContent: "center",
+            padding: "6px 8px", borderRadius: 8,
+            border: `1px solid ${!activeSubcategorySlug ? C.accent + "55" : C.borderLight}`,
+            background: !activeSubcategorySlug ? C.accentDim : C.surface,
+            color: !activeSubcategorySlug ? C.accent : C.muted,
+            fontSize: 13, fontWeight: 700, fontFamily: FONT,
+            whiteSpace: "nowrap", textDecoration: "none", transition: "all 0.15s",
+            textAlign: "center",
+          }}
+        >
+          All
+        </Link>
+        {subcategories.map((sub) => {
+          const isActive = activeSubcategorySlug === sub.slug
+          return (
+            <Link
+              key={sub.id}
+              to={`/c/${categorySlug}/${sub.slug}`}
+              style={{
+                flex: isMobile ? "0 0 auto" : "1 1 0", display: "inline-flex", alignItems: "center", justifyContent: "center",
+                padding: "6px 8px", borderRadius: 8,
+                border: `1px solid ${isActive ? C.accent + "55" : C.borderLight}`,
+                background: isActive ? C.accentDim : C.surface,
+                color: isActive ? C.accent : C.muted,
+                fontSize: 13, fontWeight: 700, fontFamily: FONT,
+                whiteSpace: "nowrap", textDecoration: "none", transition: "all 0.15s",
+                textAlign: "center",
+              }}
+            >
+              {sub.name}
+            </Link>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── FeedPanel — shared feed logic used by both DiscoveryPage and CategoryPage ──
+
+function FeedPanel({
+  category,
+  subcategoryId,
+  sort,
+  setSort,
+  catLabel,
+  onStartWriting,
+  trending,
+  serial,
+}: {
+  category: DiscoveryCategory | "all"
+  subcategoryId: string | null
+  sort: SortMode
+  setSort: (s: SortMode) => void
+  catLabel: string
+  onStartWriting: () => void
+  trending: SpurPost[]
+  serial: Awaited<ReturnType<typeof fetchFeaturedSerial>>
+}) {
   const [activeMetaFilters, setActiveMetaFilters] = useState<Set<ContentMeta>>(new Set())
   const [posts, setPosts] = useState<SpurPost[]>([])
-  const [trending, setTrending] = useState<SpurPost[]>([])
-  const [serial, setSerial] = useState<Awaited<ReturnType<typeof fetchFeaturedSerial>>>(null)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
-  const [heroCollapsed, setHeroCollapsed] = useState(true)
   const isMobile = useIsMobile()
   const offsetRef = useRef(0)
 
@@ -778,7 +1036,7 @@ function DiscoveryPage({
     setHasMore(true)
     setActiveMetaFilters(new Set())
 
-    fetchPosts({ category, sort, offset: 0 }).then((data) => {
+    fetchPosts({ category, subcategoryId, sort, offset: 0 }).then((data) => {
       if (cancelled) return
       const sorted = sort === "hot" ? [...data].sort((a, b) => hotScore(b) - hotScore(a)) : data
       setPosts(sorted)
@@ -792,18 +1050,13 @@ function DiscoveryPage({
     })
 
     return () => { cancelled = true }
-  }, [category, sort])
-
-  useEffect(() => {
-    fetchTrending().then(setTrending)
-    fetchFeaturedSerial().then(setSerial)
-  }, [])
+  }, [category, subcategoryId, sort])
 
   async function loadMore() {
     if (loadingMore || !hasMore) return
     setLoadingMore(true)
     try {
-      const data = await fetchPosts({ category, sort, offset: offsetRef.current })
+      const data = await fetchPosts({ category, subcategoryId, sort, offset: offsetRef.current })
       const sorted = sort === "hot" ? [...data].sort((a, b) => hotScore(b) - hotScore(a)) : data
       setPosts((prev) => [...prev, ...sorted])
       setHasMore(data.length === PAGE_SIZE)
@@ -820,17 +1073,159 @@ function DiscoveryPage({
     })
   }
 
-  // Which content types are actually present in loaded posts
   const availableMetaTypes = META_TYPES.filter((type) => posts.some((p) => p.content_meta.includes(type)))
-
-  // Apply client-side content type filter
   const filteredPosts = activeMetaFilters.size === 0
     ? posts
     : posts.filter((p) => [...activeMetaFilters].every((t) => p.content_meta.includes(t)))
 
+  const topPosts = filteredPosts.slice(0, 6)
+  const morePosts = filteredPosts.slice(6)
+
+  return (
+    <div style={{ maxWidth: 1180, margin: "0 auto", padding: "0 24px", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 280px", gap: 0 }}>
+      <div style={{ padding: isMobile ? "20px 0 48px" : "20px 24px 48px 0", borderRight: isMobile ? "none" : `1px solid ${C.borderLight}` }}>
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, fontFamily: FONT_MONO, color: C.accent, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 4 }}>
+                {category === "all" ? "Discover on Spur" : `${catLabel} on Spur`}
+              </div>
+              <h2 style={{ fontSize: "clamp(22px, 3vw, 32px)", lineHeight: 1.05, letterSpacing: "-0.05em", fontWeight: 900, color: C.text }}>
+                Writing worth clicking
+              </h2>
+            </div>
+            <div style={{ display: "flex", gap: 4, background: C.surface, border: `1px solid ${C.borderLight}`, borderRadius: 10, padding: 4 }}>
+              {(["recent", "hot"] as SortMode[]).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setSort(mode)}
+                  style={{ padding: "7px 14px", borderRadius: 7, border: "none", background: sort === mode ? C.accent : "transparent", color: sort === mode ? "#fff" : C.muted, fontSize: 13, fontWeight: 700, fontFamily: FONT, cursor: "pointer", transition: "all 0.15s" }}
+                >
+                  {mode === "recent" ? "Recent" : "🔥 Hot"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {availableMetaTypes.length > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 11, fontWeight: 700, fontFamily: FONT_MONO, color: C.dim, letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+                Filter by type
+              </span>
+              {availableMetaTypes.map((type) => (
+                <MetaFilterBtn
+                  key={type}
+                  type={type}
+                  active={activeMetaFilters.has(type)}
+                  onClick={() => toggleMetaFilter(type)}
+                />
+              ))}
+              {activeMetaFilters.size > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setActiveMetaFilters(new Set())}
+                  style={{ fontSize: 12, fontWeight: 700, color: C.muted, background: "transparent", border: "none", cursor: "pointer", fontFamily: FONT, padding: "0 4px" }}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {loading ? (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 280, color: C.muted, fontSize: 14 }}>
+            Loading posts…
+          </div>
+        ) : fetchError ? (
+          <div style={{ padding: 24, borderRadius: 12, border: `1px solid #ff5f5640`, background: "#ff5f5610", color: "#ff5f56", fontSize: 12, fontFamily: FONT_MONO, wordBreak: "break-all", lineHeight: 1.6 }}>
+            {fetchError}
+          </div>
+        ) : filteredPosts.length === 0 ? (
+          <div style={{ minHeight: 200, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 12, border: `1px solid ${C.borderLight}`, background: C.surface, color: C.muted, fontSize: 15 }}>
+            No posts match those filters.
+          </div>
+        ) : (
+          <>
+            {topPosts.length > 0 && (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 14, marginBottom: 8 }}>
+                {topPosts.map((p) => <TopCard key={p.id} post={p} />)}
+              </div>
+            )}
+            {morePosts.length > 0 && (
+              <>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "14px 0 12px" }}>
+                  <div style={{ flex: 1, height: 1, background: C.borderLight }} />
+                  <span style={{ fontSize: 11, fontWeight: 700, fontFamily: FONT_MONO, color: C.dim, letterSpacing: "0.08em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+                    More Posts
+                  </span>
+                  <div style={{ flex: 1, height: 1, background: C.borderLight }} />
+                </div>
+                {isMobile ? (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 14 }}>
+                    {morePosts.map((p) => <DiscoveryPostCard key={p.id} post={p} />)}
+                  </div>
+                ) : (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
+                    {morePosts.map((p) => <ListRowCard key={p.id} post={p} />)}
+                  </div>
+                )}
+              </>
+            )}
+            {hasMore && (
+              <div style={{ display: "flex", justifyContent: "center", marginTop: 24 }}>
+                <button
+                  type="button"
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "11px 22px", borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: loadingMore ? C.dim : C.text, fontSize: 14, fontWeight: 700, fontFamily: FONT, cursor: loadingMore ? "default" : "pointer", transition: "all 0.15s" }}
+                >
+                  {loadingMore ? "Loading…" : "Load more"}
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+      {!isMobile && <Sidebar trending={trending} serial={serial} onStartWriting={onStartWriting} />}
+    </div>
+  )
+}
+
+// ── DiscoveryPage ─────────────────────────────────────────────────────────────
+
+function DiscoveryPage({
+  category,
+  onStartWriting,
+  onNewPost,
+  onNewBlog,
+  onDashboard,
+  canCreateBlog,
+  darkMode,
+  onToggleTheme,
+}: {
+  category: "all" | DiscoveryCategory
+  onStartWriting: () => void
+  onNewPost: () => void
+  onNewBlog: () => void
+  onDashboard: () => void
+  canCreateBlog: boolean
+  darkMode: boolean
+  onToggleTheme: () => void
+}) {
+  const [sort, setSort] = useState<SortMode>("recent")
+  const [trending, setTrending] = useState<SpurPost[]>([])
+  const [serial, setSerial] = useState<Awaited<ReturnType<typeof fetchFeaturedSerial>>>(null)
+  const [heroCollapsed, setHeroCollapsed] = useState(true)
+  const isMobile = useIsMobile()
+
+  useEffect(() => {
+    fetchTrending().then(setTrending)
+    fetchFeaturedSerial().then(setSerial)
+  }, [])
+
   const catLabel = DISCOVERY_CATEGORIES.find((c) => c.value === category)?.label ?? "All"
-  const topPosts = filteredPosts.slice(0, 4)    // 2x2 equal card grid
-  const morePosts = filteredPosts.slice(4)       // 2-col list rows
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: FONT }}>
@@ -843,14 +1238,13 @@ function DiscoveryPage({
         colors={C}
         font={FONT}
         fontMono={FONT_MONO}
+        darkMode={darkMode}
+        onToggleTheme={onToggleTheme}
       />
-
       <main>
-        {/* Hero — collapsed by default */}
         {heroCollapsed ? (
           <div style={{ borderBottom: `1px solid ${C.borderLight}`, background: C.surface }}>
             <div style={{ maxWidth: 1180, margin: "0 auto", padding: "14px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
-              {/* Left: name + tagline */}
               <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
                 <div style={{ fontSize: 18, fontWeight: 900, letterSpacing: "-0.04em", color: C.text, lineHeight: 1 }}>
                   Spur<span style={{ color: C.accent }}>.</span>
@@ -859,8 +1253,6 @@ function DiscoveryPage({
                   Discovery-first blogging. Write, get seen, build your hub.
                 </div>
               </div>
-
-              {/* Center: value props — hidden on mobile */}
               {!isMobile && (
                 <div style={{ display: "flex", gap: 20 }}>
                   {[
@@ -875,39 +1267,21 @@ function DiscoveryPage({
                   ))}
                 </div>
               )}
-
-              {/* Right: CTA + expand */}
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
                 <button
                   type="button"
-                  onClick={onStartWriting}
-                  style={{ display: "inline-flex", alignItems: "center", gap: 8, background: C.accent, color: "#fff", borderRadius: 9, padding: "9px 16px", fontSize: 13, fontWeight: 800, border: "none", fontFamily: FONT, cursor: "pointer", whiteSpace: "nowrap" }}
+                  onClick={() => setHeroCollapsed(false)}
+                  style={{ fontSize: 12, fontWeight: 700, color: C.dim, background: "transparent", border: "none", cursor: "pointer", fontFamily: FONT, whiteSpace: "nowrap", padding: "9px 4px" }}
                 >
-                  Start Writing Free
+                  Learn more ↓
                 </button>
-                {!isMobile && (
-                  <button
-                    type="button"
-                    onClick={() => setHeroCollapsed(false)}
-                    style={{ fontSize: 12, fontWeight: 700, color: C.dim, background: "transparent", border: "none", cursor: "pointer", fontFamily: FONT, whiteSpace: "nowrap", padding: "9px 4px" }}
-                  >
-                    Learn more ↓
-                  </button>
-                )}
               </div>
             </div>
           </div>
         ) : (
           <section
             onClick={() => setHeroCollapsed(true)}
-            style={{
-              maxWidth: 1180, margin: "0 auto",
-              padding: "28px 24px 28px",
-              display: "grid",
-              gridTemplateColumns: "minmax(0, 1.15fr) minmax(320px, 0.85fr)",
-              gap: 28, alignItems: "stretch", position: "relative",
-              cursor: "pointer",
-            }}
+            style={{ maxWidth: 1180, margin: "0 auto", padding: "28px 24px 28px", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1.15fr) minmax(320px, 0.85fr)", gap: 28, alignItems: "stretch", position: "relative", cursor: "pointer" }}
           >
             <div style={{ background: `linear-gradient(180deg, rgba(242,145,6,0.06) 0%, rgba(242,145,6,0.02) 100%)`, border: `1px solid ${C.borderLight}`, borderRadius: 18, padding: "30px 28px", position: "relative" }}>
               <button
@@ -947,7 +1321,6 @@ function DiscoveryPage({
                 ))}
               </div>
             </div>
-
             <div style={{ background: C.surface, border: `1px solid ${C.borderLight}`, borderRadius: 18, padding: "22px 20px", display: "flex", flexDirection: "column", gap: 18, position: "relative" }}>
               <button
                 type="button"
@@ -978,133 +1351,121 @@ function DiscoveryPage({
           </section>
         )}
 
-        <CategoryRail activeCategory={category} />
+        <CategoryRail activeCategory={category} darkMode={darkMode} />
 
-        <div style={{ maxWidth: 1180, margin: "0 auto", padding: "0 24px", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 280px", gap: 0 }}>
-          {/* Feed */}
-          <div style={{ padding: isMobile ? "20px 0 48px" : "20px 24px 48px 0", borderRight: isMobile ? "none" : `1px solid ${C.borderLight}` }}>
-
-            {/* Feed header: title + sort + content type filters */}
-            <div style={{ marginBottom: 18 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                <div>
-                  <div style={{ fontSize: 11, fontWeight: 700, fontFamily: FONT_MONO, color: C.accent, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 4 }}>
-                    {category === "all" ? "Discover on Spur" : `${catLabel} on Spur`}
-                  </div>
-                  <h2 style={{ fontSize: "clamp(22px, 3vw, 32px)", lineHeight: 1.05, letterSpacing: "-0.05em", fontWeight: 900, color: C.text }}>
-                    Writing worth clicking
-                  </h2>
-                </div>
-
-                {/* Sort tabs */}
-                <div style={{ display: "flex", gap: 4, background: C.surface, border: `1px solid ${C.borderLight}`, borderRadius: 10, padding: 4 }}>
-                  {(["recent", "hot"] as SortMode[]).map((mode) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => setSort(mode)}
-                      style={{ padding: "7px 14px", borderRadius: 7, border: "none", background: sort === mode ? C.accent : "transparent", color: sort === mode ? "#fff" : C.muted, fontSize: 13, fontWeight: 700, fontFamily: FONT, cursor: "pointer", transition: "all 0.15s" }}
-                    >
-                      {mode === "recent" ? "Recent" : "🔥 Hot"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Content type filters — only show types present in loaded posts */}
-              {availableMetaTypes.length > 0 && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, fontFamily: FONT_MONO, color: C.dim, letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
-                    Filter by type
-                  </span>
-                  {availableMetaTypes.map((type) => (
-                    <MetaFilterBtn
-                      key={type}
-                      type={type}
-                      active={activeMetaFilters.has(type)}
-                      onClick={() => toggleMetaFilter(type)}
-                    />
-                  ))}
-                  {activeMetaFilters.size > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setActiveMetaFilters(new Set())}
-                      style={{ fontSize: 12, fontWeight: 700, color: C.muted, background: "transparent", border: "none", cursor: "pointer", fontFamily: FONT, padding: "0 4px" }}
-                    >
-                      Clear
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {loading ? (
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 280, color: C.muted, fontSize: 14 }}>
-                Loading posts…
-              </div>
-            ) : fetchError ? (
-              <div style={{ padding: 24, borderRadius: 12, border: `1px solid #ff5f5640`, background: "#ff5f5610", color: "#ff5f56", fontSize: 12, fontFamily: FONT_MONO, wordBreak: "break-all", lineHeight: 1.6 }}>
-                {fetchError}
-              </div>
-            ) : filteredPosts.length === 0 ? (
-              <div style={{ minHeight: 200, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 12, border: `1px solid ${C.borderLight}`, background: C.surface, color: C.muted, fontSize: 15 }}>
-                No posts match those filters.
-              </div>
-            ) : (
-              <>
-                {/* Top 2x2 equal card grid */}
-                {topPosts.length > 0 && (
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 14, marginBottom: 8 }}>
-                    {topPosts.map((p) => <TopCard key={p.id} post={p} />)}
-                  </div>
-                )}
-
-                {/* More Posts — 2-col list rows */}
-                {morePosts.length > 0 && (
-                  <>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "14px 0 12px" }}>
-                      <div style={{ flex: 1, height: 1, background: C.borderLight }} />
-                      <span style={{ fontSize: 11, fontWeight: 700, fontFamily: FONT_MONO, color: C.dim, letterSpacing: "0.08em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
-                        More Posts
-                      </span>
-                      <div style={{ flex: 1, height: 1, background: C.borderLight }} />
-                    </div>
-                    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, 1fr)", gap: 10 }}>
-                      {morePosts.map((p) => <ListRowCard key={p.id} post={p} />)}
-                    </div>
-                  </>
-                )}
-
-                {hasMore && (
-                  <div style={{ display: "flex", justifyContent: "center", marginTop: 24 }}>
-                    <button
-                      type="button"
-                      onClick={loadMore}
-                      disabled={loadingMore}
-                      style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "11px 22px", borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: loadingMore ? C.dim : C.text, fontSize: 14, fontWeight: 700, fontFamily: FONT, cursor: loadingMore ? "default" : "pointer", transition: "all 0.15s" }}
-                    >
-                      {loadingMore ? "Loading…" : "Load more"}
-                    </button>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-
-          {!isMobile && <Sidebar trending={trending} serial={serial} onStartWriting={onStartWriting} />}
-        </div>
+        <FeedPanel
+          category={category}
+          subcategoryId={null}
+          sort={sort}
+          setSort={setSort}
+          catLabel={catLabel}
+          onStartWriting={onStartWriting}
+          trending={trending}
+          serial={serial}
+        />
       </main>
+      <SpurFooter colors={C} />
+    </div>
+  )
+}
+
+// ── CategoryPage ──────────────────────────────────────────────────────────────
+
+function CategoryPage({
+  categorySlug,
+  subcategorySlug,
+  onStartWriting,
+  onNewPost,
+  onNewBlog,
+  onDashboard,
+  canCreateBlog,
+  darkMode,
+  onToggleTheme,
+}: {
+  categorySlug: string
+  subcategorySlug: string | null
+  onStartWriting: () => void
+  onNewPost: () => void
+  onNewBlog: () => void
+  onDashboard: () => void
+  canCreateBlog: boolean
+  darkMode: boolean
+  onToggleTheme: () => void
+}) {
+  const [sort, setSort] = useState<SortMode>("recent")
+  const [trending, setTrending] = useState<SpurPost[]>([])
+  const [serial, setSerial] = useState<Awaited<ReturnType<typeof fetchFeaturedSerial>>>(null)
+  const [subcategories, setSubcategories] = useState<Subcategory[]>([])
+  const [subcategoryId, setSubcategoryId] = useState<string | null>(null)
+
+  const cat = DISCOVERY_CATEGORIES.find((c) => c.slug === categorySlug)
+  const category = (cat?.value ?? "all") as DiscoveryCategory | "all"
+  const catLabel = cat?.label ?? categorySlug
+
+  useEffect(() => {
+    fetchTrending().then(setTrending)
+    fetchFeaturedSerial().then(setSerial)
+    fetchSubcategories(categorySlug).then(setSubcategories)
+  }, [categorySlug])
+
+  useEffect(() => {
+    if (!subcategorySlug || subcategories.length === 0) {
+      setSubcategoryId(null)
+      return
+    }
+    const found = subcategories.find((s) => s.slug === subcategorySlug)
+    setSubcategoryId(found?.id ?? null)
+  }, [subcategorySlug, subcategories])
+
+  return (
+    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: FONT }}>
+      <SpurHeader
+        onStartWriting={onStartWriting}
+        onNewPost={onNewPost}
+        onNewBlog={onNewBlog}
+        onDashboard={onDashboard}
+        canCreateBlog={canCreateBlog}
+        colors={C}
+        font={FONT}
+        fontMono={FONT_MONO}
+        darkMode={darkMode}
+        onToggleTheme={onToggleTheme}
+      />
+      <main>
+        <CategoryRail activeCategory={category} darkMode={darkMode} />
+        <SubcategoryRail
+          subcategories={subcategories}
+          activeSubcategorySlug={subcategorySlug}
+          categorySlug={categorySlug}
+          darkMode={darkMode}
+        />
+        <FeedPanel
+          category={category}
+          subcategoryId={subcategoryId}
+          sort={sort}
+          setSort={setSort}
+          catLabel={catLabel}
+          onStartWriting={onStartWriting}
+          trending={trending}
+          serial={serial}
+        />
+      </main>
+      <SpurFooter colors={C} />
     </div>
   )
 }
 
 // ── CategoryPageWrapper ───────────────────────────────────────────────────────
 
-function CategoryPageWrapper(props: Omit<React.ComponentProps<typeof DiscoveryPage>, "category">) {
-  const { categorySlug } = useParams<{ categorySlug: string }>()
-  const cat = DISCOVERY_CATEGORIES.find((c) => c.slug === categorySlug)
-  const category = (cat?.value ?? "all") as "all" | DiscoveryCategory
-  return <DiscoveryPage {...props} category={category} />
+function CategoryPageWrapper(props: { onStartWriting: () => void; onNewPost: () => void; onNewBlog: () => void; onDashboard: () => void; canCreateBlog: boolean; darkMode: boolean; onToggleTheme: () => void }) {
+  const { categorySlug, subcategorySlug } = useParams<{ categorySlug: string; subcategorySlug?: string }>()
+  return (
+    <CategoryPage
+      {...props}
+      categorySlug={categorySlug ?? ""}
+      subcategorySlug={subcategorySlug ?? null}
+    />
+  )
 }
 
 // ── SpurAppRoutes ─────────────────────────────────────────────────────────────
@@ -1120,6 +1481,13 @@ function SpurAppRoutes() {
   const [loadingEntitlements, setLoadingEntitlements] = useState(true)
   const [continueIntoCreateBlog, setContinueIntoCreateBlog] = useState(false)
   const [showNewPostModal, setShowNewPostModal] = useState(false)
+  const [darkMode, setDarkMode] = useState(true)
+
+  C = darkMode ? DARK_C : LIGHT_C
+
+  useEffect(() => {
+    document.body.style.background = darkMode ? "#080e1a" : "#f5f7fa"
+  }, [darkMode])
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null))
@@ -1214,6 +1582,8 @@ function SpurAppRoutes() {
     onNewBlog: () => setShowCreateBlogModal(true),
     onDashboard: () => navigate("/admin"),
     canCreateBlog,
+    darkMode,
+    onToggleTheme: () => setDarkMode((v) => !v),
   }
 
   return (
@@ -1221,12 +1591,94 @@ function SpurAppRoutes() {
       <Routes>
         <Route path="/" element={<DiscoveryPage {...sharedProps} category="all" />} />
         <Route path="/c/:categorySlug" element={<CategoryPageWrapper {...sharedProps} />} />
+        <Route path="/c/:categorySlug/:subcategorySlug" element={<CategoryPageWrapper {...sharedProps} />} />
         <Route
           path="/pricing"
           element={
-            <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: FONT }}>
+            <div style={{ background: C.bg, color: C.text, fontFamily: FONT }}>
               <SpurHeader {...sharedProps} colors={C} font={FONT} fontMono={FONT_MONO} />
-              <PricingPage />
+              <PricingPage colors={C} />
+              <SpurFooter colors={C} />
+            </div>
+          }
+        />
+        <Route
+          path="/about"
+          element={
+            <div style={{ background: C.bg, color: C.text, fontFamily: FONT }}>
+              <SpurHeader {...sharedProps} colors={C} font={FONT} fontMono={FONT_MONO} />
+              <AboutPage colors={C} />
+              <SpurFooter colors={C} />
+            </div>
+          }
+        />
+        <Route
+          path="/contact"
+          element={
+            <div style={{ background: C.bg, color: C.text, fontFamily: FONT }}>
+              <SpurHeader {...sharedProps} colors={C} font={FONT} fontMono={FONT_MONO} />
+              <ComingSoonPage colors={C} title="Contact" description="We're working on a contact form. In the meantime, reach us at hello@spur.ink." />
+              <SpurFooter colors={C} />
+            </div>
+          }
+        />
+        <Route
+          path="/careers"
+          element={
+            <div style={{ background: C.bg, color: C.text, fontFamily: FONT }}>
+              <SpurHeader {...sharedProps} colors={C} font={FONT} fontMono={FONT_MONO} />
+              <ComingSoonPage colors={C} title="Careers" description="We're a small team building something we believe in. When we're ready to grow, we'll post here." />
+              <SpurFooter colors={C} />
+            </div>
+          }
+        />
+        <Route
+          path="/docs"
+          element={
+            <div style={{ background: C.bg, color: C.text, fontFamily: FONT }}>
+              <SpurHeader {...sharedProps} colors={C} font={FONT} fontMono={FONT_MONO} />
+              <ComingSoonPage colors={C} title="Documentation" description="Full documentation for Spur is coming soon. It'll cover everything from getting started to advanced platform features." />
+              <SpurFooter colors={C} />
+            </div>
+          }
+        />
+        <Route
+          path="/forums"
+          element={
+            <div style={{ background: C.bg, color: C.text, fontFamily: FONT }}>
+              <SpurHeader {...sharedProps} colors={C} font={FONT} fontMono={FONT_MONO} />
+              <ComingSoonPage colors={C} title="Forums" description="Community forums for Spur writers and readers are on the roadmap. Stay tuned." />
+              <SpurFooter colors={C} />
+            </div>
+          }
+        />
+        <Route
+          path="/privacy"
+          element={
+            <div style={{ background: C.bg, color: C.text, fontFamily: FONT }}>
+              <SpurHeader {...sharedProps} colors={C} font={FONT} fontMono={FONT_MONO} />
+              <PrivacyPage colors={C} />
+              <SpurFooter colors={C} />
+            </div>
+          }
+        />
+        <Route
+          path="/terms"
+          element={
+            <div style={{ background: C.bg, color: C.text, fontFamily: FONT }}>
+              <SpurHeader {...sharedProps} colors={C} font={FONT} fontMono={FONT_MONO} />
+              <TermsPage colors={C} />
+              <SpurFooter colors={C} />
+            </div>
+          }
+        />
+        <Route
+          path="/cookies"
+          element={
+            <div style={{ background: C.bg, color: C.text, fontFamily: FONT }}>
+              <SpurHeader {...sharedProps} colors={C} font={FONT} fontMono={FONT_MONO} />
+              <CookiePage colors={C} />
+              <SpurFooter colors={C} />
             </div>
           }
         />
@@ -1318,6 +1770,15 @@ function SpurAppRoutes() {
   )
 }
 
+
 export default function SpurApp() {
+  useEffect(() => {
+    document.body.style.margin = "0"
+    document.body.style.padding = "0"
+    return () => {
+      document.body.style.margin = ""
+      document.body.style.padding = ""
+    }
+  }, [])
   return <SpurAppRoutes />
 }

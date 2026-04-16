@@ -40,5 +40,9 @@ export function resolveSurface(hostname: string, pathname: string): AppSurface {
     return "site"
   }
 
+  if (host === "spur.localhost") {
+      return "spur"
+  }
+
   return "sheriff"
 }

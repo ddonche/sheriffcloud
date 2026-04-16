@@ -24,6 +24,8 @@ type SpurHeaderProps = {
   colors: Colors
   font: string
   fontMono: string
+  darkMode: boolean
+  onToggleTheme: () => void
 }
 
 function getSessionLabel(session: any) {
@@ -71,6 +73,22 @@ function IconGear({ size = 20, color = "currentColor" }: { size?: number; color?
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" width={size} height={size} fill={color}>
       <path d="M259.1 73.5C262.1 58.7 275.2 48 290.4 48L350.2 48C365.4 48 378.5 58.7 381.5 73.5L396 143.5C410.1 149.5 423.3 157.2 435.3 166.3L503.1 143.8C517.5 139 533.3 145 540.9 158.2L570.8 210C578.4 223.2 575.7 239.8 564.3 249.9L511 297.3C511.9 304.7 512.3 312.3 512.3 320C512.3 327.7 511.8 335.3 511 342.7L564.4 390.2C575.8 400.3 578.4 417 570.9 430.1L541 481.9C533.4 495 517.6 501.1 503.2 496.3L435.4 473.8C423.3 482.9 410.1 490.5 396.1 496.6L381.7 566.5C378.6 581.4 365.5 592 350.4 592L290.6 592C275.4 592 262.3 581.3 259.3 566.5L244.9 496.6C230.8 490.6 217.7 482.9 205.6 473.8L137.5 496.3C123.1 501.1 107.3 495.1 99.7 481.9L69.8 430.1C62.2 416.9 64.9 400.3 76.3 390.2L129.7 342.7C128.8 335.3 128.4 327.7 128.4 320C128.4 312.3 128.9 304.7 129.7 297.3L76.3 249.8C64.9 239.7 62.3 223 69.8 209.9L99.7 158.1C107.3 144.9 123.1 138.9 137.5 143.7L205.3 166.2C217.4 157.1 230.6 149.5 244.6 143.4L259.1 73.5zM320.3 400C364.5 399.8 400.2 363.9 400 319.7C399.8 275.5 363.9 239.8 319.7 240C275.5 240.2 239.8 276.1 240 320.3C240.2 364.5 276.1 400.2 320.3 400z"/>
+    </svg>
+  )
+}
+
+function IconSun({ size = 18, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" width={size} height={size} fill={color}>
+      <path d="M320 32C328.4 32 336.3 36.4 340.6 43.7L396.1 136.3L500.9 110C509.1 108 517.8 110.4 523.7 116.3C529.6 122.2 532 131 530 139.1L503.7 243.8L596.4 299.3C603.6 303.6 608.1 311.5 608.1 319.9C608.1 328.3 603.7 336.2 596.4 340.5L503.7 396.1L530 500.8C532 509 529.6 517.7 523.7 523.6C517.8 529.5 509 532 500.9 530L396.2 503.7L340.7 596.4C336.4 603.6 328.5 608.1 320.1 608.1C311.7 608.1 303.8 603.7 299.5 596.4L243.9 503.7L139.2 530C131 532 122.4 529.6 116.4 523.7C110.4 517.8 108 509 110 500.8L136.2 396.1L43.6 340.6C36.4 336.2 32 328.4 32 320C32 311.6 36.4 303.7 43.7 299.4L136.3 243.9L110 139.1C108 130.9 110.3 122.3 116.3 116.3C122.3 110.3 131 108 139.2 110L243.9 136.2L299.4 43.6L301.2 41C305.7 35.3 312.6 31.9 320 31.9zM320 176C240.5 176 176 240.5 176 320C176 399.5 240.5 464 320 464C399.5 464 464 399.5 464 320C464 240.5 399.5 176 320 176zM320 416C267 416 224 373 224 320C224 267 267 224 320 224C373 224 416 267 416 320C416 373 373 416 320 416z"/>
+    </svg>
+  )
+}
+
+function IconMoon({ size = 18, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" width={size} height={size} fill={color}>
+      <path d="M320 64C178.6 64 64 178.6 64 320C64 461.4 178.6 576 320 576C388.8 576 451.3 548.8 497.3 504.6C504.6 497.6 506.7 486.7 502.6 477.5C498.5 468.3 488.9 462.6 478.8 463.4C473.9 463.8 469 464 464 464C362.4 464 280 381.6 280 280C280 207.9 321.5 145.4 382.1 115.2C391.2 110.7 396.4 100.9 395.2 90.8C394 80.7 386.6 72.5 376.7 70.3C358.4 66.2 339.4 64 320 64z"/>
     </svg>
   )
 }
@@ -224,6 +242,8 @@ export default function SpurHeader({
   colors,
   font,
   fontMono,
+  darkMode,
+  onToggleTheme,
 }: SpurHeaderProps) {
   const { userEmail, signOut } = useAuth()
   const session = userEmail ? { user: { email: userEmail } } : null
@@ -258,7 +278,7 @@ export default function SpurHeader({
         position: "sticky",
         top: 0,
         zIndex: 20,
-        background: "rgba(8,14,26,0.92)",
+        background: darkMode ? "rgba(8,14,26,0.92)" : "rgba(245,247,250,0.92)",
         borderBottom: `1px solid ${colors.borderLight}`,
         backdropFilter: "blur(12px)",
       }}
@@ -293,6 +313,14 @@ export default function SpurHeader({
           {isMobile ? (
             // ── Mobile ──────────────────────────────────────────────────────
             <>
+              {/* Theme toggle */}
+              <IconBtn onClick={onToggleTheme} title={darkMode ? "Switch to light mode" : "Switch to dark mode"} colors={colors}>
+                {darkMode
+                  ? <IconSun size={18} color={colors.muted} />
+                  : <IconMoon size={18} color={colors.muted} />
+                }
+              </IconBtn>
+
               {/* Info icon → hover: About + Pricing */}
               <div
                 style={{ position: "relative" }}
@@ -395,6 +423,14 @@ export default function SpurHeader({
               >
                 Pricing
               </Link>
+
+              {/* Theme toggle */}
+              <IconBtn onClick={onToggleTheme} title={darkMode ? "Switch to light mode" : "Switch to dark mode"} colors={colors}>
+                {darkMode
+                  ? <IconSun size={18} color={colors.muted} />
+                  : <IconMoon size={18} color={colors.muted} />
+                }
+              </IconBtn>
 
               {!session ? (
                 <>
