@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { SerialPageResponse, SerialChapter } from '../lib/types'
 import { formatDate } from '../lib/api'
+import { getSupabase } from '../supabase'
 
 interface Props {
   data: SerialPageResponse
@@ -25,8 +26,190 @@ function readingTime(html: string): number {
   return Math.max(1, Math.round(words / 200))
 }
 
+function AuthorFollowRow({ author, profileId }: { author: { display_name: string | null; username: string | null; avatar_url: string | null } | null; profileId: string }) {
+  const sb = getSupabase()
+  const [following, setFollowing] = useState(false)
+  const [followerCount, setFollowerCount] = useState(0)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+
+  const displayName = author?.display_name || author?.username || 'Unknown'
+  const initials = displayName.split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase()
+
+  useEffect(() => {
+    sb.auth.getSession().then(({ data }: any) => {
+      setCurrentUserId(data.session?.user?.id ?? null)
+    })
+    const { data: { subscription } } = sb.auth.onAuthStateChange((_e: any, s: any) => {
+      setCurrentUserId(s?.user?.id ?? null)
+    })
+    return () => subscription.unsubscribe()
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      const { count } = await sb.from('spur_follows').select('id', { count: 'exact', head: true }).eq('following_id', profileId)
+      if (!cancelled) setFollowerCount(count ?? 0)
+      if (currentUserId) {
+        const { data } = await sb.from('spur_follows').select('id').eq('follower_id', currentUserId).eq('following_id', profileId).maybeSingle()
+        if (!cancelled) setFollowing(!!data)
+      }
+      if (!cancelled) setLoading(false)
+    }
+    load()
+    return () => { cancelled = true }
+  }, [profileId, currentUserId])
+
+  async function toggle() {
+    if (!currentUserId || busy) return
+    setBusy(true)
+    if (following) {
+      await sb.from('spur_follows').delete().eq('follower_id', currentUserId).eq('following_id', profileId)
+      setFollowing(false)
+      setFollowerCount(c => Math.max(0, c - 1))
+    } else {
+      await sb.from('spur_follows').insert({ follower_id: currentUserId, following_id: profileId })
+      setFollowing(true)
+      setFollowerCount(c => c + 1)
+    }
+    setBusy(false)
+  }
+
+  if (loading) return null
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
+      {author?.avatar_url ? (
+        <img src={author.avatar_url} alt={displayName} style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+      ) : (
+        <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--color-surface)', border: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'var(--color-muted)', flexShrink: 0 }}>
+          {initials}
+        </div>
+      )}
+      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text)', fontFamily: 'var(--font-sans)' }}>{displayName}</span>
+      <span style={{ fontSize: 12, color: 'var(--color-dim)' }}>·</span>
+      <span style={{ fontSize: 12, color: 'var(--color-muted)', fontFamily: 'var(--font-sans)' }}>
+        {followerCount.toLocaleString()} {followerCount === 1 ? 'follower' : 'followers'}
+      </span>
+      <button
+        type="button"
+        onClick={toggle}
+        disabled={busy || !currentUserId}
+        style={{
+          padding: '5px 14px',
+          borderRadius: 8,
+          border: following ? '1px solid var(--color-border)' : 'none',
+          background: following ? 'transparent' : 'var(--color-accent)',
+          color: following ? 'var(--color-muted)' : '#fff',
+          fontSize: 12,
+          fontWeight: 700,
+          fontFamily: 'var(--font-sans)',
+          cursor: busy || !currentUserId ? 'default' : 'pointer',
+          opacity: busy ? 0.6 : 1,
+          transition: 'all 0.12s',
+        }}
+      >
+        {following ? 'Following' : 'Follow'}
+      </button>
+    </div>
+  )
+}
+
+function SeriesCarousel({ serials, onNavigate, darkMode }: {
+  serials: any[]
+  onNavigate: (path: string) => void
+  darkMode: boolean
+}) {
+  const [offset, setOffset] = useState(0)
+  const VISIBLE = 5
+
+  const canPrev = offset > 0
+  const canNext = offset + VISIBLE < serials.length
+
+  return (
+    <div>
+      <div style={{
+        fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
+        color: 'var(--color-dim)', fontFamily: 'var(--font-mono)', marginBottom: 10,
+      }}>
+        Other books in this series
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <button
+          type="button"
+          onClick={() => setOffset(o => Math.max(0, o - VISIBLE))}
+          disabled={!canPrev}
+          style={{
+            width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
+            border: `1px solid var(--color-border-light)`,
+            background: 'transparent', cursor: canPrev ? 'pointer' : 'default',
+            color: canPrev ? 'var(--color-muted)' : 'var(--color-dim)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 14, lineHeight: 1, opacity: canPrev ? 1 : 0.3,
+            transition: 'opacity 0.12s',
+          }}
+        >‹</button>
+
+        <div style={{ display: 'flex', gap: 8, overflow: 'hidden' }}>
+          {serials.slice(offset, offset + VISIBLE).map((s: any) => {
+            const bookNum = s.collection_sort_order ?? (serials.indexOf(s) + 1)
+            return (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => onNavigate(`/blog/serial/${s.slug}`)}
+                title={s.title}
+                style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
+                  background: 'transparent', border: 'none', cursor: 'pointer', padding: 0,
+                  flexShrink: 0,
+                }}
+              >
+                <div style={{
+                  width: 44, aspectRatio: '2/3', borderRadius: 5, overflow: 'hidden',
+                  border: `1px solid ${darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
+                  background: 'var(--color-surface)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  {s.cover_image_url
+                    ? <img src={s.cover_image_url} alt={s.title} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                    : <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-dim)', fontFamily: 'var(--font-mono)' }}>{bookNum}</span>
+                  }
+                </div>
+                <span style={{ fontSize: 10, color: 'var(--color-dim)', fontFamily: 'var(--font-mono)' }}>
+                  {bookNum}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setOffset(o => Math.min(serials.length - VISIBLE, o + VISIBLE))}
+          disabled={!canNext}
+          style={{
+            width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
+            border: `1px solid var(--color-border-light)`,
+            background: 'transparent', cursor: canNext ? 'pointer' : 'default',
+            color: canNext ? 'var(--color-muted)' : 'var(--color-dim)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 14, lineHeight: 1, opacity: canNext ? 1 : 0.3,
+            transition: 'opacity 0.12s',
+          }}
+        >›</button>
+      </div>
+    </div>
+  )
+}
+
 export default function SerialPage({ data, darkMode, onNavigate }: Props) {
   const { serial, chapters, site } = data
+  const collection = (data as any).collection ?? null
+  const collectionSerials: any[] = (data as any).collectionSerials ?? []
+  const currentIndex = collectionSerials.findIndex((s: any) => s.id === serial.id)
 
   const [progress, setProgress] = useState<number | null>(null)
   const [open, setOpen] = useState(false)
@@ -80,6 +263,51 @@ export default function SerialPage({ data, darkMode, onNavigate }: Props) {
     <div className="page-container">
       <div className="serial-page fade-up">
 
+        {/* ── Collection banner ── */}
+        {collection && (
+          <button
+            type="button"
+            onClick={() => onNavigate(`/blog/collection/${collection.slug}`)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              background: 'transparent',
+              border: 'none',
+              borderBottom: '1px solid var(--color-border-light)',
+              padding: '10px 0 12px',
+              marginBottom: 24,
+              cursor: 'pointer',
+              width: '100%',
+              textAlign: 'left',
+            }}
+          >
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-accent)', fontFamily: 'var(--font-mono)' }}>
+              Part of
+            </span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text)' }}>
+              {collection.title}
+            </span>
+            {collectionSerials.length > 1 && (
+              <>
+                <span style={{ color: 'var(--color-dim)', fontSize: 12 }}>·</span>
+                <span style={{ fontSize: 12, color: 'var(--color-dim)' }}>
+                  {collectionSerials.length} books
+                </span>
+              </>
+            )}
+            {currentIndex >= 0 && (
+              <>
+                <span style={{ color: 'var(--color-dim)', fontSize: 12 }}>·</span>
+                <span style={{ fontSize: 12, color: 'var(--color-muted)' }}>
+                  Book {currentIndex + 1}
+                </span>
+              </>
+            )}
+            <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--color-dim)' }}>View series →</span>
+          </button>
+        )}
+
         {/* ── Hero: two-column ── */}
         <div className="serial-hero">
           {serial.cover_image_url && (
@@ -113,6 +341,15 @@ export default function SerialPage({ data, darkMode, onNavigate }: Props) {
               </span>
             </div>
 
+            {/* ── Sibling books carousel ── */}
+            {collection && collectionSerials.filter((s: any) => s.id !== serial.id).length > 0 && (
+              <SeriesCarousel
+                serials={collectionSerials.filter((s: any) => s.id !== serial.id)}
+                onNavigate={onNavigate}
+                darkMode={darkMode}
+              />
+            )}
+
             {serial.tagline && (
               <p className="serial-hero__tagline">{serial.tagline}</p>
             )}
@@ -121,6 +358,10 @@ export default function SerialPage({ data, darkMode, onNavigate }: Props) {
 
             {serial.description && (
               <p className="serial-hero__description">{serial.description}</p>
+            )}
+
+            {serial.author_id && (
+              <AuthorFollowRow author={data.author} profileId={serial.author_id} />
             )}
 
             {ctaChapter && (
@@ -230,7 +471,6 @@ export default function SerialPage({ data, darkMode, onNavigate }: Props) {
           </div>
         </div>
 
-      </div>
-    </div>
+      </div>    </div>
   )
 }

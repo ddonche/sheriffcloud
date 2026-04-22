@@ -108,7 +108,7 @@ export default function AuthModal({ onClose, onSuccess }: AuthModalProps) {
     setLoading(true)
 
     const { error } = await sb.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/`,
+      redirectTo: "https://sheriffcloud.com/",
     })
 
     setLoading(false)
@@ -126,7 +126,7 @@ export default function AuthModal({ onClose, onSuccess }: AuthModalProps) {
 
     await sb.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: window.location.origin },
+      options: { redirectTo: "https://sheriffcloud.com" },
     })
   }
 

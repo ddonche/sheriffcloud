@@ -44,6 +44,7 @@ type DiscoveryCategory =
   | "history"
   | "art"
   | "fiction"
+  | "poetry"
 
 type SpurPost = {
   id: string
@@ -147,6 +148,7 @@ const DISCOVERY_CATEGORIES: Array<{ value: "all" | DiscoveryCategory; label: str
   { value: "history",    label: "History",    slug: "history" },
   { value: "art",        label: "Art",        slug: "art" },
   { value: "fiction",    label: "Fiction",    slug: "fiction" },
+  { value: "poetry",     label: "Poetry",     slug: "poetry" },
 ]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -398,7 +400,7 @@ async function fetchFeaturedSerial(): Promise<{
       tagline,
       slug,
       cover_image_url,
-      owner_id,
+      author_id,
       sites!inner ( subdomain, site_origin )
     `)
     .in("status", ["ongoing", "completed"])
@@ -417,7 +419,7 @@ async function fetchFeaturedSerial(): Promise<{
   const { data: authorProfile } = await supabase
     .from("profiles")
     .select("display_name, username, avatar_url")
-    .eq("id", (data as any).owner_id)
+    .eq("id", (data as any).author_id)
     .maybeSingle()
 
   return {

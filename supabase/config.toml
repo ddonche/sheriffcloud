@@ -403,3 +403,6 @@ verify_jwt = false
 
 [functions.stripe_webhook]
 verify_jwt = false
+
+[functions.docs_files]
+verify_jwt = false

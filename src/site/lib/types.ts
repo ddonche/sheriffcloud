@@ -38,6 +38,7 @@ export interface Serial {
   status: 'ongoing' | 'complete' | 'hiatus' | 'cancelled'
   created_at: string
   updated_at: string
+  author_id: string | null
 }
 
 export interface SerialSummary {
@@ -116,7 +117,38 @@ export interface SerialPageResponse {
   type: 'serial_page'
   site: Site
   serial: Serial
+  author: Author | null
   chapters: SerialChapter[]
+  collection?: CollectionPageCollection | null
+  collectionSerials?: CollectionSerial[] | null
+}
+
+export interface CollectionSerial {
+  id: string
+  title: string
+  slug: string
+  tagline: string | null
+  cover_image_url: string | null
+  status: string
+  unit_label: string
+  collection_sort_order: number | null
+  chapter_count: number
+  author_display_name: string | null
+  author_avatar_url: string | null
+}
+
+export interface CollectionPageCollection {
+  id: string
+  title: string
+  slug: string
+  description: string | null
+}
+
+export interface CollectionPageResponse {
+  type: 'collection_page'
+  site: Site
+  collection: CollectionPageCollection
+  serials: CollectionSerial[]
 }
 
 export interface NotFoundResponse {
@@ -157,5 +189,6 @@ export type RouterResponse =
   | BlogIndexResponse
   | BlogPostResponse
   | SerialPageResponse
+  | CollectionPageResponse
   | CodexIndexResponse
   | NotFoundResponse

@@ -23,7 +23,6 @@ const EyeOffIcon = () => (
   </svg>
 )
 
-
 const GoogleIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width={18} height={18}>
     <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
@@ -97,7 +96,7 @@ export function AuthModal({ onClose }: AuthModalProps) {
     setLoading(true)
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/`,
+      redirectTo: "https://spur.ink/",
     })
 
     setLoading(false)
@@ -108,13 +107,12 @@ export function AuthModal({ onClose }: AuthModalProps) {
     setMessage("Password reset email sent!")
   }
 
-
   const handleGoogleAuth = async () => {
     setError(null)
     sessionStorage.setItem('oauth_return_to', window.location.href)
     await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.origin },
+      options: { redirectTo: "https://spur.ink" },
     })
   }
 
@@ -148,7 +146,7 @@ export function AuthModal({ onClose }: AuthModalProps) {
       }}
     >
       <div style={{ marginBottom: 32 }}>
-        <img src="/logo.png" alt="Spur" style={{ height: 64 }} />
+        <img src="/spur-logo.png" alt="Spur" style={{ height: 64 }} />
       </div>
 
       <div

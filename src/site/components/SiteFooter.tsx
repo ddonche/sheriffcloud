@@ -19,7 +19,6 @@ export default function SiteFooter({ tier = 'free' }: Props) {
       {tier === 'free' && (
         <a
           href="https://spur.ink"
-          target="_blank"
           rel="noopener noreferrer"
           className="site-footer__badge"
         >

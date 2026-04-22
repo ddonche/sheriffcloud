@@ -5,6 +5,8 @@ import { SpurPostCard } from "./SpurPostCard"
 import { SpurPostEditor } from "./SpurPostEditor"
 import { SpurCategoriesPanel } from "./SpurCategoriesPanel"
 import { SpurSerialsPanel } from "./SpurSerialsPanel"
+import { SpurCollectionsPanel } from "./SpurCollectionsPanel"
+import type { SpurCollection } from "./SpurCollectionsPanel"
 import { getSiteUrl } from "../../shared/site/getSiteUrl"
 
 type Site = {
@@ -27,11 +29,12 @@ type SpurAuthorPerms = {
 }
 
 const NAV_FEATURES = [
-  { key: "posts", label: "Posts" },
-  { key: "serials", label: "Serials" },
-  { key: "categories", label: "Categories" },
-  { key: "writers", label: "Writers" },
-  { key: "settings", label: "Settings" },
+  { key: "posts",       label: "Posts" },
+  { key: "serials",     label: "Serials" },
+  { key: "collections", label: "Collections" },
+  { key: "categories",  label: "Categories" },
+  { key: "writers",     label: "Writers" },
+  { key: "settings",    label: "Settings" },
 ]
 
 export function SpurPanel({ site, userId, supabase }: { site: Site; userId: string; supabase: any }) {
@@ -42,6 +45,7 @@ export function SpurPanel({ site, userId, supabase }: { site: Site; userId: stri
   const [posts, setPosts] = useState<SpurPost[]>([])
   const [serials, setSerials] = useState<SpurSerial[]>([])
   const [serialsLoading, setSerialsLoading] = useState(false)
+  const [collections, setCollections] = useState<SpurCollection[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<"all" | "published" | "draft" | "scheduled">("all")
   const [editingPost, setEditingPost] = useState<SpurPost | null | "new">(null)
@@ -111,6 +115,7 @@ export function SpurPanel({ site, userId, supabase }: { site: Site; userId: stri
   useEffect(() => {
     loadPosts()
     loadSerials()
+    loadCollections()
   }, [activeSiteId])
 
   useEffect(() => {
@@ -159,6 +164,15 @@ export function SpurPanel({ site, userId, supabase }: { site: Site; userId: stri
     const { data } = await query
     setSerials(data ?? [])
     setSerialsLoading(false)
+  }
+
+  async function loadCollections() {
+    const { data } = await supabase
+      .from("spur_serial_collections")
+      .select("*")
+      .eq("site_id", activeSiteId)
+      .order("created_at", { ascending: false })
+    setCollections(data ?? [])
   }
 
   function handleSaved(saved: SpurPost) {
@@ -332,6 +346,18 @@ export function SpurPanel({ site, userId, supabase }: { site: Site; userId: stri
           serials={serials}
           loading={serialsLoading}
           onChanged={loadSerials}
+          collections={collections}
+        />
+      )
+    }
+    if (feature === "collections") {
+      return (
+        <SpurCollectionsPanel
+          siteId={activeSiteId}
+          userId={userId}
+          supabase={supabase}
+          theme={theme}
+          onChanged={loadCollections}
         />
       )
     }

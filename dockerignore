@@ -6,4 +6,3 @@
 !nginx.conf
 !og-server.mjs
 !sheriff-core/**
-!site/**

@@ -6,6 +6,7 @@ import FloatingBar from '../components/FloatingBar'
 import LikeButton from '../components/LikeButton'
 import Comments from '../components/Comments'
 import PostList from '../components/PostList'
+import { getSupabase } from '../supabase'
 
 interface Props {
   data: BlogPostResponse
@@ -43,6 +44,86 @@ function setMeta(property: string, content: string) {
     document.head.appendChild(el)
   }
   el.setAttribute('content', content)
+}
+
+function AuthorFollowRow({ profileId }: { profileId: string }) {
+  const sb = getSupabase()
+  const [following, setFollowing] = useState(false)
+  const [followerCount, setFollowerCount] = useState(0)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    sb.auth.getSession().then(({ data }: any) => {
+      setCurrentUserId(data.session?.user?.id ?? null)
+    })
+    const { data: { subscription } } = sb.auth.onAuthStateChange((_e: any, s: any) => {
+      setCurrentUserId(s?.user?.id ?? null)
+    })
+    return () => subscription.unsubscribe()
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      const { count } = await sb.from('spur_follows').select('id', { count: 'exact', head: true }).eq('following_id', profileId)
+      if (!cancelled) setFollowerCount(count ?? 0)
+      if (currentUserId) {
+        const { data } = await sb.from('spur_follows').select('id').eq('follower_id', currentUserId).eq('following_id', profileId).maybeSingle()
+        if (!cancelled) setFollowing(!!data)
+      }
+      if (!cancelled) setLoading(false)
+    }
+    load()
+    return () => { cancelled = true }
+  }, [profileId, currentUserId])
+
+  async function toggle() {
+    if (!currentUserId || busy) return
+    setBusy(true)
+    if (following) {
+      await sb.from('spur_follows').delete().eq('follower_id', currentUserId).eq('following_id', profileId)
+      setFollowing(false)
+      setFollowerCount(c => Math.max(0, c - 1))
+    } else {
+      await sb.from('spur_follows').insert({ follower_id: currentUserId, following_id: profileId })
+      setFollowing(true)
+      setFollowerCount(c => c + 1)
+    }
+    setBusy(false)
+  }
+
+  if (loading) return null
+  if (currentUserId === profileId) return null
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <button
+        type="button"
+        onClick={toggle}
+        disabled={busy || !currentUserId}
+        style={{
+          padding: '6px 16px',
+          borderRadius: 8,
+          border: following ? '1px solid var(--color-border)' : 'none',
+          background: following ? 'transparent' : 'var(--color-accent)',
+          color: following ? 'var(--color-muted)' : '#fff',
+          fontSize: 12,
+          fontWeight: 700,
+          fontFamily: 'var(--font-sans)',
+          cursor: busy || !currentUserId ? 'default' : 'pointer',
+          opacity: busy ? 0.6 : 1,
+          transition: 'all 0.12s',
+        }}
+      >
+        {following ? 'Following' : 'Follow'}
+      </button>
+      <span style={{ fontSize: 12, color: 'var(--color-muted)', fontFamily: 'var(--font-sans)' }}>
+        {followerCount.toLocaleString()} {followerCount === 1 ? 'follower' : 'followers'}
+      </span>
+    </div>
+  )
 }
 
 export default function BlogPost({ data, darkMode, onNavigate, onAuthRequired }: Props) {
@@ -137,7 +218,7 @@ export default function BlogPost({ data, darkMode, onNavigate, onAuthRequired }:
                 <button
                   type="button"
                   onClick={() => {
-                    if (discovery?.slug) onNavigate(`/discover/${discovery.slug}`)
+                    { const parentSlug = discovery?.parent?.slug ?? (discovery?.parent?.name ?? '').toLowerCase(); const url = parentSlug ? `https://spur.ink/c/${parentSlug}` : `https://spur.ink`; window.location.href = url }
                   }}
                   style={{
                     display: 'inline-flex',
@@ -177,7 +258,7 @@ export default function BlogPost({ data, darkMode, onNavigate, onAuthRequired }:
                 <button
                   type="button"
                   onClick={() => {
-                    if (discovery?.slug) onNavigate(`/discover/${discovery.slug}`)
+                    { const parentSlug = discovery?.parent?.slug ?? (discovery?.parent?.name ?? '').toLowerCase(); const url = parentSlug ? `https://spur.ink/c/${parentSlug}/${discovery.slug}` : `https://spur.ink`; window.location.href = url }
                   }}
                   style={{
                     display: 'inline-flex',
@@ -231,8 +312,9 @@ export default function BlogPost({ data, darkMode, onNavigate, onAuthRequired }:
                   ? <img className="author-chip__avatar" src={author.avatar_url} alt={name} />
                   : <div className="author-chip__avatar--placeholder">{initials(name)}</div>
                 }
-                <span className="author-chip__name">{name}</span>
+                <a href={`/u/${author.username}`} className="author-chip__name" style={{ textDecoration: 'none', color: 'inherit' }}>{name}</a>
               </div>
+              <AuthorFollowRow profileId={author.id} />
               <span className="blog-post-header__date">{date}</span>
               <span className="blog-post-header__readtime">{mins} min read</span>
             </div>
@@ -350,7 +432,7 @@ export default function BlogPost({ data, darkMode, onNavigate, onAuthRequired }:
                 }
                 onClick={() => {
                   if (discovery?.slug) {
-                    onNavigate(`/discover/${discovery.slug}`)
+                    (() => { const parentSlug = discovery?.parent?.slug ?? (discovery?.parent?.name ?? '').toLowerCase(); const url = parentSlug ? `https://spur.ink/c/${parentSlug}/${discovery.slug}` : `https://spur.ink`; window.location.href = url })()
                   }
                 }}
                 style={{
@@ -404,7 +486,7 @@ export default function BlogPost({ data, darkMode, onNavigate, onAuthRequired }:
               <button
                 type="button"
                 onClick={() => {
-                  if (discovery?.slug) onNavigate(`/discover/${discovery.slug}`)
+                  { const parentSlug = discovery?.parent?.slug ?? (discovery?.parent?.name ?? '').toLowerCase(); const url = parentSlug ? `https://spur.ink/c/${parentSlug}` : `https://spur.ink`; window.location.href = url }
                 }}
                 style={{
                   display: 'inline-flex',
@@ -444,7 +526,7 @@ export default function BlogPost({ data, darkMode, onNavigate, onAuthRequired }:
               <button
                 type="button"
                 onClick={() => {
-                  if (discovery?.slug) onNavigate(`/discover/${discovery.slug}`)
+                  { const parentSlug = discovery?.parent?.slug ?? (discovery?.parent?.name ?? '').toLowerCase(); const url = parentSlug ? `https://spur.ink/c/${parentSlug}/${discovery.slug}` : `https://spur.ink`; window.location.href = url }
                 }}
                 style={{
                   display: 'inline-flex',
@@ -512,8 +594,9 @@ export default function BlogPost({ data, darkMode, onNavigate, onAuthRequired }:
           }
           <div className="author-block__info">
             <span className="author-block__label">Written by</span>
-            <span className="author-block__name">{name}</span>
+            <a href={`/u/${author.username}`} className="author-block__name" style={{ textDecoration: 'none', color: 'inherit' }}>{name}</a>
             {author.bio && <span className="author-block__bio">{author.bio}</span>}
+            <AuthorFollowRow profileId={author.id} />
           </div>
         </div>
 

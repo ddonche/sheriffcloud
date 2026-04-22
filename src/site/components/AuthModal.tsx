@@ -69,7 +69,9 @@ export default function AuthModal({ onClose, onSuccess }: Props) {
   const handleForgotPassword = async () => {
     if (!email) { setError('Enter your email first'); return }
     setError(null); setLoading(true)
-    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/` })
+    const { error } = await sb.auth.resetPasswordForEmail(email, {
+      redirectTo: 'https://sheriffcloud.com/',
+    })
     setLoading(false)
     if (error) { setError(error.message); return }
     setMessage('Password reset email sent!')
@@ -80,7 +82,7 @@ export default function AuthModal({ onClose, onSuccess }: Props) {
     sessionStorage.setItem('oauth_return_to', window.location.href)
     await sb.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.origin },
+      options: { redirectTo: 'https://sheriffcloud.com' },
     })
   }
 

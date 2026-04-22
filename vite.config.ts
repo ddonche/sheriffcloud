@@ -9,4 +9,18 @@ export default defineConfig({
     emptyOutDir: false,
     assetsDir: "assets-home",
   },
+  server: {
+    proxy: {
+      "/api": {
+        target: "https://admin.sheriffcloud.com",
+        changeOrigin: true,
+        secure: true,
+        configure: (proxy) => {
+          proxy.on("error", (err) => {
+            console.error("proxy error", err)
+          })
+        },
+      },
+    },
+  },
 })

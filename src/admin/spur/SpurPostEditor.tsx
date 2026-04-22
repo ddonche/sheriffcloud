@@ -474,12 +474,21 @@ export function SpurPostEditor({
       `}</style>
 
       {/* Top chrome */}
-      <div style={{ flexShrink: 0, height: 52, display: "flex", alignItems: "center", gap: 12, padding: "0 28px", background: theme.surface, borderBottom: `1px solid ${theme.border}` }}>
-        <button onClick={onCancel} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: theme.muted, fontFamily: SPURF, display: "flex", alignItems: "center", gap: 5, padding: 0 }}>
-          <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-          Posts
-        </button>
+      {/* Top chrome */}
+      <div
+        style={{
+          flexShrink: 0,
+          height: 52,
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          padding: "0 20px 0 28px",
+          background: theme.surface,
+          borderBottom: `1px solid ${theme.border}`,
+        }}
+      >
         <div style={{ flex: 1 }} />
+
         {(["draft", "published", "scheduled"] as const).map(s => {
           const cfg = stCfg[s]
           const active = status === s
@@ -513,10 +522,50 @@ export function SpurPostEditor({
             </button>
           )
         })}
-        <button onClick={handleSave} disabled={saving || !canDraft}
-          style={{ padding: "7px 20px", borderRadius: 7, border: "none", background: theme.accent, color: "#fff", fontSize: 13, fontWeight: 700, cursor: saving ? "default" : "pointer", opacity: saving ? 0.6 : 1, fontFamily: SPURF, transition: "background 0.15s" }}
+
+        <button
+          type="button"
+          onClick={onCancel}
+          aria-label="Close editor"
+          style={{
+            width: 34,
+            height: 34,
+            borderRadius: 8,
+            border: `1px solid ${theme.border}`,
+            background: "transparent",
+            color: theme.muted,
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 18,
+            lineHeight: 1,
+            padding: 0,
+            flexShrink: 0,
+          }}
+        >
+          ×
+        </button>
+
+        <button
+          onClick={handleSave}
+          disabled={saving || !canDraft}
+          style={{
+            padding: "7px 20px",
+            borderRadius: 7,
+            border: "none",
+            background: theme.accent,
+            color: "#fff",
+            fontSize: 13,
+            fontWeight: 700,
+            cursor: saving ? "default" : "pointer",
+            opacity: saving ? 0.6 : 1,
+            fontFamily: SPURF,
+            transition: "background 0.15s"
+          }}
           onMouseEnter={e => { if (!saving) e.currentTarget.style.background = theme.accentHov }}
-          onMouseLeave={e => { e.currentTarget.style.background = theme.accent }}>
+          onMouseLeave={e => { e.currentTarget.style.background = theme.accent }}
+        >
           {saving ? "Saving…" : "Save"}
         </button>
       </div>
@@ -834,7 +883,7 @@ export function SpurPostEditor({
               <TB onClick={() => editor?.chain().focus().toggleBlockquote().run()} active={editor?.isActive("blockquote")} title="Blockquote"><svg viewBox="0 0 24 24" width={15} height={15} fill="currentColor"><path d="M3 3h7v7H6a3 3 0 003 3v2a5 5 0 01-5-5V3zm11 0h7v7h-4a3 3 0 003 3v2a5 5 0 01-5-5V3z" opacity={0.9}/></svg></TB>
               <TB onClick={() => editor?.chain().focus().toggleCodeBlock().run()} active={editor?.isActive("codeBlock")} title="Code block"><svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></TB>
               <TSep />
-              <TB onClick={() => { const url = window.prompt("URL"); if (url) editor?.chain().focus().setLink({ href: url }).run() }} active={editor?.isActive("link")} title="Link"><svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg></TB>
+              <TB onClick={() => { if (editor?.isActive("link")) { editor?.chain().focus().unsetLink().run() } else { const url = window.prompt("URL"); if (url) editor?.chain().focus().setLink({ href: url }).run() } }} active={editor?.isActive("link")} title="Link"><svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg></TB>
               <TB onClick={() => { const url = window.prompt("Image URL"); if (url) editor?.chain().focus().setImage({ src: url }).run() }} title="Image"><svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></TB>
               <TB onClick={() => editor?.chain().focus().setHorizontalRule().run()} title="Divider"><svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><line x1="3" y1="12" x2="21" y2="12"/></svg></TB>
               <TSep />

@@ -6,6 +6,7 @@ import { SpurPanel } from "./spur/SpurPanel"
 import AccountPanel from "./components/AccountPanel"
 import SiteSettingsPanel from "./components/SiteSettingsPanel"
 import { CodexPanel } from "./codex/CodexPanel"
+import { DocsPanel } from "./docs/DocsPanel"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -173,7 +174,10 @@ function NewSiteModal({ onClose, onCreated, supabase, userId, siteLimit, existin
     }
 
     try {
-      const { data: site, error: e } = await supabase.from("sites").insert({ name: name.trim(), subdomain, owner_id: userId, site_type: type }).select().single()
+      const isDocsOnly = type === "cloud" && selectedApps.length > 0 && !selectedApps.includes("spur") && selectedApps.includes("docs")
+      const origin = isDocsOnly ? "sheriffcloud" : "spur"
+
+      const { data: site, error: e } = await supabase.from("sites").insert({ name: name.trim(), subdomain, owner_id: userId, site_type: type, site_origin: origin }).select().single()
       if (e) throw new Error(e.code === "23505" ? `"${subdomain}" is already taken.` : e.message)
       if (type === "cloud" && selectedApps.length > 0) {
         await supabase.from("site_apps").insert(selectedApps.map(app => ({ site_id: site.id, app, enabled: true })))
@@ -356,24 +360,8 @@ function Sidebar({ ownedSites, sharedSpurSites, profile, plan, selection, onSele
                 {sharedSpurSites.map(site => {
                   const active = selection?.kind === "app" && selection.siteId === site.id && selection.app === "spur"
                   return (
-                    <button
-                      key={site.id}
-                      type="button"
-                      onClick={() => onSelect({ kind: "app", siteId: site.id, app: "spur" })}
-                      style={{
-                        width: "100%",
-                        border: "none",
-                        cursor: "pointer",
-                        textAlign: "left",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 10,
-                        padding: "10px 16px",
-                        background: active ? SB.active : "transparent",
-                        borderLeft: `3px solid ${active ? APP_META.spur.color : "transparent"}`,
-                        transition: "background 0.1s",
-                        fontFamily: FONT
-                      }}
+                    <button key={site.id} type="button" onClick={() => onSelect({ kind: "app", siteId: site.id, app: "spur" })}
+                      style={{ width: "100%", border: "none", cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", background: active ? SB.active : "transparent", borderLeft: `3px solid ${active ? APP_META.spur.color : "transparent"}`, transition: "background 0.1s", fontFamily: FONT }}
                       onMouseEnter={e => { if (!active) e.currentTarget.style.background = SB.hover }}
                       onMouseLeave={e => { if (!active) e.currentTarget.style.background = "transparent" }}
                     >
@@ -403,11 +391,7 @@ function Sidebar({ ownedSites, sharedSpurSites, profile, plan, selection, onSele
           <div style={{ borderTop: `1px solid ${SB.border}`, padding: "10px 16px", flexShrink: 0, display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ width: 28, height: 28, borderRadius: "50%", background: SB.active, border: `1px solid ${SB.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" }}>
               {profile.avatar_url ? (
-                <img
-                  src={profile.avatar_url}
-                  alt={profile.display_name || profile.username}
-                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                />
+                <img src={profile.avatar_url} alt={profile.display_name || profile.username} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
               ) : (
                 <span style={{ fontSize: 12, fontWeight: 700, color: "#e5e7eb" }}>
                   {(profile.display_name || profile.username || "?").charAt(0).toUpperCase()}
@@ -483,6 +467,7 @@ export default function App() {
   const [siteApps, setSiteApps] = useState<Record<string, SiteApp[]>>({})
   const [showNewSite, setShowNewSite] = useState(false)
   const [selection, setSelection] = useState<NavSelection | null>(null)
+  const [sitesLoaded, setSitesLoaded] = useState(false)
 
   useEffect(() => {
     if (!supabase) return
@@ -612,7 +597,7 @@ export default function App() {
     }
 
     setSharedSpurSites(sharedSitesData)
-
+    setSitesLoaded(true)
     setSelection((prev: NavSelection | null) => prev ?? { kind: "spur" })
   }
 
@@ -623,6 +608,7 @@ export default function App() {
     setPlan(null)
     setEntitlements(null)
     setProfileLoaded(false)
+    setSitesLoaded(false)
     setOwnedSites([])
     setSharedSpurSites([])
     setSiteApps({})
@@ -655,7 +641,15 @@ export default function App() {
       const defaultSpurSite = ownedSites[0] ?? sharedSpurSites[0] ?? null
       return defaultSpurSite ? <SpurPanel site={defaultSpurSite} userId={session.user.id} supabase={supabase} /> : <StubView title="Blog" />
     }
-    if (selection.kind === "docs") return <StubView title="Docs" />
+
+    if (selection.kind === "docs") {
+      if (!sitesLoaded) return <div style={{ padding: 32, color: "#9ca3af", fontFamily: FONT }}>Loading…</div>
+      const docsSites = ownedSites.filter(s =>
+        (siteApps[s.id] ?? []).some(a => a.app === "docs" && a.enabled)
+      )
+      return <DocsPanel sites={docsSites} initialSiteId={docsSites[0]?.id ?? null} userId={session.user.id} supabase={supabase} />
+    }
+
     if (selection.kind === "forum") return <StubView title="Forum" />
 
     if (selection.kind === "site" && selectedSite) {

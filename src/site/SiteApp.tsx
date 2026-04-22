@@ -7,6 +7,7 @@ import SiteFooter from './components/SiteFooter'
 import BlogIndex from './pages/BlogIndex'
 import BlogPost from './pages/BlogPost'
 import SerialPage from './pages/SerialPage'
+import CollectionPage from './pages/CollectionPage'
 import CodexIndex from './pages/CodexIndex'
 import NotFound from './pages/NotFound'
 import { getSupabase } from './supabase'
@@ -124,6 +125,7 @@ function App() {
       case 'blog_index': return <BlogIndex data={data} onNavigate={devNavigate} darkMode={darkMode} onPrefetch={prefetchRoute} />
       case 'blog_post':  return <BlogPost data={data} onNavigate={devNavigate} darkMode={darkMode} onAuthRequired={() => setShowAuth(true)} />
       case 'serial_page': return <SerialPage data={data} onNavigate={devNavigate} darkMode={darkMode} />
+      case 'collection_page': return <CollectionPage data={data} onNavigate={devNavigate} darkMode={darkMode} />
       case 'codex_index': return <CodexIndex data={data} onNavigate={devNavigate} supabase={getSupabase()} />
       case 'not_found':
       default:           return <NotFound />

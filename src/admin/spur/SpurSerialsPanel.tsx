@@ -2,9 +2,14 @@ import { useRef, useState, useEffect } from "react"
 import type { SpurSerial } from "./spurTypes"
 import type { SpurTheme } from "./spurTheme"
 import { SPURF, SPURM } from "./spurTheme"
+import type { SpurCollection } from "./SpurCollectionsPanel"
 
 const UNIT_LABELS = ["Chapter", "Part", "Episode", "Issue", "Volume", "Entry", "Installment"]
 const STATUS_OPTIONS = ["ongoing", "completed", "hiatus", "cancelled"]
+
+function slugify(title: string): string {
+  return title.toLowerCase().trim().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').slice(0, 80)
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -17,6 +22,8 @@ type EditState = {
   cover_image_url: string | null
   coverUploading: boolean
   coverUploadError: string | null
+  collection_id: string | null
+  collection_sort_order: number | null
 }
 
 function makeEditState(s?: SpurSerial): EditState {
@@ -29,6 +36,8 @@ function makeEditState(s?: SpurSerial): EditState {
     cover_image_url: s?.cover_image_url ?? null,
     coverUploading: false,
     coverUploadError: null,
+    collection_id: (s as any)?.collection_id ?? null,
+    collection_sort_order: (s as any)?.collection_sort_order ?? null,
   }
 }
 
@@ -157,11 +166,12 @@ function AutoGrowTextarea({ value, onChange, placeholder, inputStyle }: {
   )
 }
 
-function FormFields({ state, setState, inputRef, theme }: {
+function FormFields({ state, setState, inputRef, theme, collections }: {
   state: EditState
   setState: React.Dispatch<React.SetStateAction<EditState>>
   inputRef: React.RefObject<HTMLInputElement | null>
   theme: SpurTheme
+  collections: SpurCollection[]
 }) {
   const inputStyle: React.CSSProperties = {
     width: "100%", background: "transparent", border: "none",
@@ -199,6 +209,34 @@ function FormFields({ state, setState, inputRef, theme }: {
           <InlineSelect value={state.status} onChange={v => setState(p => ({ ...p, status: v }))} options={STATUS_OPTIONS} theme={theme} />
         </Field>
       </div>
+
+      {collections.length > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 20, alignItems: "end" }}>
+          <Field label="Collection (optional)" theme={theme}>
+            <InlineSelect
+              value={state.collection_id ? (collections.find(c => c.id === state.collection_id)?.title ?? "None") : "None"}
+              onChange={v => {
+                const found = collections.find(c => c.title === v)
+                setState(p => ({ ...p, collection_id: found?.id ?? null, collection_sort_order: found ? p.collection_sort_order : null }))
+              }}
+              options={["None", ...collections.map(c => c.title)]}
+              theme={theme}
+            />
+          </Field>
+          {state.collection_id && (
+            <Field label="Book #" theme={theme}>
+              <input
+                type="number"
+                min={1}
+                value={state.collection_sort_order ?? ""}
+                onChange={e => setState(p => ({ ...p, collection_sort_order: e.target.value ? parseInt(e.target.value, 10) : null }))}
+                placeholder="1"
+                style={{ ...inputStyle, width: 64, textAlign: "center" }}
+              />
+            </Field>
+          )}
+        </div>
+      )}
 
       <CoverUploadRow state={state} setState={setState} inputRef={inputRef} theme={theme} />
     </div>
@@ -238,6 +276,7 @@ export function SpurSerialsPanel({
   serials,
   loading,
   onChanged,
+  collections,
 }: {
   siteId: string
   userId: string
@@ -246,6 +285,7 @@ export function SpurSerialsPanel({
   serials: SpurSerial[]
   loading: boolean
   onChanged: () => Promise<void> | void
+  collections: SpurCollection[]
 }) {
   const [creating, setCreating] = useState(false)
   const [createState, setCreateState] = useState<EditState>(makeEditState())
@@ -280,17 +320,21 @@ export function SpurSerialsPanel({
 
   async function handleCreate() {
     if (!createState.title.trim()) { setCreateError("Title is required."); return }
+    if (createState.collection_id && !createState.collection_sort_order) { setCreateError("Book # is required when assigning to a collection."); return }
     setSaving(true); setCreateError(null)
     try {
       const { error } = await supabase.from("spur_serials").insert({
         site_id: siteId,
         author_id: userId,
         title: createState.title.trim(),
+        slug: slugify(createState.title.trim()),
         tagline: createState.tagline.trim() || null,
         description: createState.description.trim() || null,
         unit_label: createState.unit_label,
         status: createState.status,
         cover_image_url: createState.cover_image_url,
+        collection_id: createState.collection_id ?? null,
+        collection_sort_order: createState.collection_sort_order ?? null,
       })
       if (error) throw new Error(error.message)
       setCreateState(makeEditState())
@@ -305,15 +349,19 @@ export function SpurSerialsPanel({
 
   async function handleSaveEdit(id: string) {
     if (!editState.title.trim()) { setEditError("Title is required."); return }
+    if (editState.collection_id && !editState.collection_sort_order) { setEditError("Book # is required when assigning to a collection."); return }
     setEditSaving(true); setEditError(null)
     try {
       const { error } = await supabase.from("spur_serials").update({
         title: editState.title.trim(),
+        slug: slugify(editState.title.trim()),
         tagline: editState.tagline.trim() || null,
         description: editState.description.trim() || null,
         unit_label: editState.unit_label,
         status: editState.status,
         cover_image_url: editState.cover_image_url,
+        collection_id: editState.collection_id ?? null,
+        collection_sort_order: editState.collection_sort_order ?? null,
         updated_at: new Date().toISOString(),
       }).eq("id", id)
       if (error) throw new Error(error.message)
@@ -365,7 +413,7 @@ export function SpurSerialsPanel({
           </div>
           <input ref={createCoverRef} type="file" accept="image/*" style={{ display: "none" }}
             onChange={e => { const f = e.target.files?.[0]; if (f) uploadCover(f, setCreateState); e.target.value = "" }} />
-          <FormFields state={createState} setState={setCreateState} inputRef={createCoverRef} theme={theme} />
+          <FormFields state={createState} setState={setCreateState} inputRef={createCoverRef} theme={theme} collections={collections} />
           {createError && (
             <div style={{ marginTop: 16, padding: "10px 14px", background: theme.redDim, border: `1px solid ${theme.red}40`, borderRadius: 7, fontSize: 13, color: theme.red, fontFamily: SPURF }}>
               {createError}
@@ -375,7 +423,7 @@ export function SpurSerialsPanel({
             onCancel={() => { setCreating(false); setCreateState(makeEditState()); setCreateError(null) }}
             onSubmit={handleCreate}
             submitting={saving}
-            canSubmit={!!createState.title.trim()}
+            canSubmit={!!createState.title.trim() && (!createState.collection_id || !!createState.collection_sort_order)}
             submitLabel="Create Serial"
             submittingLabel="Creating…"
             theme={theme}
@@ -403,7 +451,7 @@ export function SpurSerialsPanel({
                 <div key={s.id} style={{ background: theme.surface, border: `1px solid ${theme.accent}44`, borderRadius: 10, padding: 24, marginBottom: 12 }}>
                   <input ref={editCoverRef} type="file" accept="image/*" style={{ display: "none" }}
                     onChange={e => { const f = e.target.files?.[0]; if (f) uploadCover(f, setEditState); e.target.value = "" }} />
-                  <FormFields state={editState} setState={setEditState} inputRef={editCoverRef} theme={theme} />
+                  <FormFields state={editState} setState={setEditState} inputRef={editCoverRef} theme={theme} collections={collections} />
                   {editError && (
                     <div style={{ marginTop: 16, padding: "10px 14px", background: theme.redDim, border: `1px solid ${theme.red}40`, borderRadius: 7, fontSize: 13, color: theme.red, fontFamily: SPURF }}>
                       {editError}
@@ -413,7 +461,7 @@ export function SpurSerialsPanel({
                     onCancel={() => { setEditingId(null); setEditError(null) }}
                     onSubmit={() => handleSaveEdit(s.id)}
                     submitting={editSaving}
-                    canSubmit={!!editState.title.trim()}
+                    canSubmit={!!editState.title.trim() && (!editState.collection_id || !!editState.collection_sort_order)}
                     submitLabel="Save"
                     submittingLabel="Saving…"
                     theme={theme}

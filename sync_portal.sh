@@ -69,4 +69,8 @@ aws s3 sync "$LOCAL_DIR" "s3://$R2_BUCKET/$REMOTE_PREFIX" \
   --endpoint-url "$ENDPOINT_URL"
 
 echo "SYNC COMPLETE: $PORTAL"
-write_status "success" "Upload complete" ""
+write_status "success" "Site published" ""
+
+echo "Cleaning up local dist..."
+rm -rf "$LOCAL_DIR"
+echo "Cleanup complete: $LOCAL_DIR"

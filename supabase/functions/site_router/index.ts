@@ -257,6 +257,58 @@ Deno.serve(async (req) => {
     })
   }
 
+  // ── Route: /blog/collection/:slug ────────────────────────────
+  const collectionSlugMatch = path.match(/^\/blog\/collection\/([^/]+)\/?$/)
+  if (collectionSlugMatch) {
+    const slug = collectionSlugMatch[1]
+
+    const { data: collection } = await supabase
+      .from('spur_serial_collections')
+      .select('id, title, slug, description')
+      .eq('site_id', site.id)
+      .eq('slug', slug)
+      .maybeSingle()
+
+    if (!collection) return json({ type: 'not_found' })
+
+    const { data: serialRows } = await supabase
+      .from('spur_serials')
+      .select('id, title, slug, tagline, cover_image_url, status, unit_label, collection_sort_order, author_id')
+      .eq('collection_id', collection.id)
+      .order('collection_sort_order', { ascending: true, nullsFirst: false })
+
+    const serials = serialRows ?? []
+
+    // Get chapter counts for each serial
+    const serialIds = serials.map((s: any) => s.id)
+    let chapterCountMap: Record<string, number> = {}
+    if (serialIds.length > 0) {
+      const { data: chapterCounts } = await supabase
+        .from('spur_posts')
+        .select('serial_id')
+        .in('serial_id', serialIds)
+        .eq('status', 'published')
+
+      for (const row of chapterCounts ?? []) {
+        chapterCountMap[row.serial_id] = (chapterCountMap[row.serial_id] ?? 0) + 1
+      }
+    }
+
+    const profileMap = Object.fromEntries((profileRows ?? []).map((p: any) => [p.id, p]))
+
+    const serialsWithCounts = serials.map((s: any) => {
+      const author = profileMap[s.author_id] ?? null
+      return {
+        ...s,
+        chapter_count: chapterCountMap[s.id] ?? 0,
+        author_display_name: author?.display_name ?? author?.username ?? null,
+        author_avatar_url: author?.avatar_url ?? null,
+      }
+    })
+
+    return json({ type: 'collection_page', site, collection, serials: serialsWithCounts })
+  }
+
   // ── Route: /serial/:slug ──────────────────────────────────────
   const serialSlugMatch = path.match(/^\/blog\/serial\/([^/]+)\/?$/)
   if (serialSlugMatch) {
@@ -264,7 +316,7 @@ Deno.serve(async (req) => {
 
     const { data: serial } = await supabase
       .from('spur_serials')
-      .select('id, title, slug, tagline, description, cover_image_url, unit_label, status, created_at, updated_at')
+      .select('id, title, slug, tagline, description, cover_image_url, unit_label, status, created_at, updated_at, collection_id, collection_sort_order, author_id')
       .eq('site_id', site.id)
       .eq('slug', slug)
       .maybeSingle()
@@ -278,11 +330,63 @@ Deno.serve(async (req) => {
       .eq('status', 'published')
       .order('serial_index', { ascending: true })
 
+    let collection = null
+    let collectionSerials = null
+
+    if ((serial as any).collection_id) {
+      const { data: collectionRow } = await supabase
+        .from('spur_serial_collections')
+        .select('id, title, slug, description')
+        .eq('id', (serial as any).collection_id)
+        .maybeSingle()
+
+      collection = collectionRow ?? null
+
+      if (collection) {
+        const { data: siblingRows } = await supabase
+          .from('spur_serials')
+          .select('id, title, slug, tagline, cover_image_url, status, unit_label, collection_sort_order, author_id')
+          .eq('collection_id', collection.id)
+          .order('collection_sort_order', { ascending: true, nullsFirst: false })
+
+        const siblings = siblingRows ?? []
+        const siblingIds = siblings.map((s: any) => s.id)
+        let chapterCountMap: Record<string, number> = {}
+
+        if (siblingIds.length > 0) {
+          const { data: chapterCounts } = await supabase
+            .from('spur_posts')
+            .select('serial_id')
+            .in('serial_id', siblingIds)
+            .eq('status', 'published')
+
+          for (const row of chapterCounts ?? []) {
+            chapterCountMap[row.serial_id] = (chapterCountMap[row.serial_id] ?? 0) + 1
+          }
+        }
+
+        const profileMap = Object.fromEntries((profileRows ?? []).map((p: any) => [p.id, p]))
+
+        collectionSerials = siblings.map((s: any) => {
+          const author = profileMap[s.author_id] ?? null
+          return {
+            ...s,
+            chapter_count: chapterCountMap[s.id] ?? 0,
+            author_display_name: author?.display_name ?? author?.username ?? null,
+            author_avatar_url: author?.avatar_url ?? null,
+          }
+        })
+      }
+    }
+
     return json({
       type: 'serial_page',
       site,
       serial,
+      author: (profileRows ?? []).find((p: any) => p.id === (serial as any).author_id) ?? null,
       chapters: chapters ?? [],
+      collection,
+      collectionSerials,
     })
   }
 

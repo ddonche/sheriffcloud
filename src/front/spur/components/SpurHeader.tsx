@@ -296,14 +296,14 @@ export default function SpurHeader({
         }}
       >
         {/* Logo */}
-        <Link
-          to="/spur"
+        <a
+          href="https://spur.ink"
           className="spur-header__item"
           style={{ display: "inline-flex", alignItems: "center", flexShrink: 0 }}
           aria-label="Spur home"
         >
           <img src="/spur-logo.png" alt="Spur" style={{ height: 52, width: "auto", display: "block" }} />
-        </Link>
+        </a>
 
         {/* Nav */}
         <nav

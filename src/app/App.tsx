@@ -6,6 +6,7 @@ const SheriffFrontApp = lazy(() => import("../front/sheriff/SheriffFrontApp"))
 const AdminRoot = lazy(() => import("../admin/AdminRoot"))
 const SpurApp = lazy(() => import("../front/spur/SpurApp"))
 const SiteApp = lazy(() => import("../site/SiteApp"))
+const UserProfilePage = lazy(() => import("../front/profile/UserProfilePage"))
 
 function LoadingScreen() {
   return (
@@ -24,6 +25,17 @@ function AppRoutes() {
   const isAdminHost =
     hostname === "admin.localhost" ||
     hostname === "admin.sheriffcloud.com"
+
+  // /u/:username is ecosystem-wide — intercept before any surface app
+  if (pathname.startsWith("/u/")) {
+    return (
+      <Suspense fallback={<LoadingScreen />}>
+        <Routes>
+          <Route path="/u/:username" element={<UserProfilePage />} />
+        </Routes>
+      </Suspense>
+    )
+  }
 
   if (surface === "admin") {
     return (

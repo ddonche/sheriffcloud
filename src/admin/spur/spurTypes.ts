@@ -30,6 +30,7 @@ export type SpurCategory = {
 export type SpurFeature =
   | "posts"
   | "serials"
+  | "collections"
   | "categories"
   | "writers"
   | "settings"

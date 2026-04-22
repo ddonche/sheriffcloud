@@ -35,7 +35,6 @@ export default function PostCard({
   darkMode,
   onClick,
   onHover,
-  onDiscoveryClick,
   onSerialClick,
 }: Props) {
   const [hovered, setHovered] = useState(false)
@@ -125,8 +124,14 @@ export default function PostCard({
             aria-label={(post as any).discovery?.name ?? 'In Discovery'}
             onClick={(e) => {
               e.stopPropagation()
-              const slug = (post as any).discovery?.slug
-              if (slug) onDiscoveryClick?.(slug)
+              const parentSlug = (post as any).discovery?.parent?.slug ?? ((post as any).discovery?.parent?.name ?? '').toLowerCase()
+              const subSlug = (post as any).discovery?.slug
+              const url = parentSlug && subSlug
+                ? `https://spur.ink/c/${parentSlug}/${subSlug}`
+                : parentSlug
+                  ? `https://spur.ink/c/${parentSlug}`
+                  : `https://spur.ink`
+              window.location.href = url
             }}
             style={{
               position: 'absolute',
