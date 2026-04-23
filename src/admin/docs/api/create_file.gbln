@@ -1,0 +1,26 @@
+query | :trim(:env("GOBLIN_QUERY_STRING"))
+parts | :split(query, "&")
+
+portal | parts[0]
+path   | parts[1]
+title  | parts[2]
+
+root_base | :trim(:env("SHERIFF_ROOT"))
+
+if root_base == ""
+    root_base |= ".."
+xx
+
+root | "{root_base}/site/portals/{portal}"
+full_path | "{root}/{path}"
+
+template | "^^^^\ntitle: {title}\nauthor: AUTHOR OR SITE NAME\nlayout: docs\nmeta_kind: docs | wiki | blog | article | tutorial | reference | guide | how-to | overview | quickstart | api | changelog | faq | entry | post | review | announcement\nsummary: ONE-SENTENCE SUMMARY\ngloss: DEFINITION IF THE PAGE WARRANTS IT\n^^^^\n\n<!-- Don't forget to hit Save when you are done editing. -->\n\n# {title}\n"
+
+:write_text!(full_path, template)
+
+out | {
+  "ok": true,
+  "path": path
+}
+
+:say(:json_stringify(out))

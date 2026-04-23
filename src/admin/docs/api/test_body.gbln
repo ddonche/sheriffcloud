@@ -1,0 +1,11 @@
+method | :env("GOBLIN_METHOD")
+body   | :env("GOBLIN_BODY")
+query  | :env("GOBLIN_QUERY_STRING")
+
+out | {
+  "method": method,
+  "query": query,
+  "body": body
+}
+
+:say(:json_stringify(out))

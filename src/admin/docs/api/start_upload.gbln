@@ -1,0 +1,49 @@
+portal | :trim(:env("GOBLIN_QUERY_STRING"))
+
+if portal == ""
+    out | {
+      "ok": false,
+      "stderr": "missing portal"
+    }
+    :say(:json_stringify(out))
+
+else
+    root_base | :trim(:env("SHERIFF_ROOT"))
+
+    if root_base == ""
+        out | {
+          "ok": true,
+          "message": "upload skipped (local mode)"
+        }
+        :say(:json_stringify(out))
+    else
+        status_dir  | "{root_base}/data/upload-status"
+        log_dir     | "{root_base}/data/upload-logs"
+        status_path | "{status_dir}/{portal}.json"
+        log_path    | "{log_dir}/{portal}.log"
+
+        :create_dir!(status_dir)
+        :create_dir!(log_dir)
+
+        :write_text!(status_path, :json_stringify({
+          "ok": true,
+          "portal": portal,
+          "state": "starting",
+          "message": "Upload starting",
+          "error": ""
+        }))
+
+        :write_text!(log_path, "UPLOAD START REQUESTED\n")
+
+        :run_cmd(
+          "sh sync_portal.sh {portal} > data/upload-logs/{portal}.log 2>&1 < /dev/null &",
+          root_base
+        )
+
+        out | {
+          "ok": true,
+          "message": "upload started"
+        }
+        :say(:json_stringify(out))
+    xx
+xx

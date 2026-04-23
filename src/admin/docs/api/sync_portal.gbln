@@ -1,0 +1,48 @@
+act parse_query_value(raw, key)
+    part | :keep_after(raw, "{key}=")
+    if part == ""
+        return ""
+    xx
+
+    return :keep_before(part, "&")
+xx
+
+raw | :trim(:env("GOBLIN_QUERY_STRING"))
+portal | :trim(parse_query_value(raw, "portal"))
+
+root_base | "C:/Users/kc516/desktop/sheriffcloud"
+script | "{root_base}/storage_sync.py"
+local_dir | "{root_base}/dist/{portal}"
+
+if portal == ""
+    out | {
+      "ok": false,
+      "code": nil,
+      "stdout": "",
+      "stderr": "missing portal"
+    }
+
+    :say(:json_stringify(out))
+
+elif :file_exists(local_dir) == false
+    out | {
+      "ok": false,
+      "code": nil,
+      "stdout": "",
+      "stderr": "portal dist not found"
+    }
+
+    :say(:json_stringify(out))
+
+else
+    result | :run_cmd("python {script} --local {local_dir} --remote dist/{portal}", root_base)
+
+    out | {
+      "ok": result["ok"],
+      "code": result["code"],
+      "stdout": result["stdout"],
+      "stderr": result["stderr"]
+    }
+
+    :say(:json_stringify(out))
+xx

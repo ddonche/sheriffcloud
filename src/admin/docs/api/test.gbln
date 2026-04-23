@@ -1,0 +1,13 @@
+out | {
+  "method": :req_method(),
+  "path": :req_path(),
+  "query": :req_query(),
+  "auth": :req_header("authorization"),
+  "cookie": :cookie("test")
+}
+
+:set_status(201)
+:set_header("x-test", "working")
+:set_cookie("test", "123", { "path": "/" })
+
+:say(:json_stringify(out))

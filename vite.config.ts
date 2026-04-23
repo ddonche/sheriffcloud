@@ -10,14 +10,20 @@ export default defineConfig({
     assetsDir: "assets-home",
   },
   server: {
+    port: 5173,
     proxy: {
-      "/api": {
-        target: "https://admin.sheriffcloud.com",
+      "/api/": {
+        target: "http://localhost:9000",
         changeOrigin: true,
-        secure: true,
         configure: (proxy) => {
           proxy.on("error", (err) => {
             console.error("proxy error", err)
+          })
+          proxy.on("proxyReq", (proxyReq) => {
+            console.log("PROXY REQ:", proxyReq.path)
+          })
+          proxy.on("proxyRes", (proxyRes) => {
+            console.log("PROXY RES:", proxyRes.statusCode)
           })
         },
       },

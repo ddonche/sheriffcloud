@@ -1,0 +1,24 @@
+query | :trim(:env("GOBLIN_QUERY_STRING"))
+
+parts | :split(query, "&")
+
+portal | parts[0]
+path   | parts[1]
+
+root_base | :trim(:env("SHERIFF_ROOT"))
+
+if root_base == ""
+    root_base |= ".."
+xx
+
+root | "{root_base}/site/portals/{portal}"
+full_path | "{root}/{path}"
+
+:delete_path!(full_path)
+
+out | {
+  "ok": true,
+  "path": path
+}
+
+:say(:json_stringify(out))

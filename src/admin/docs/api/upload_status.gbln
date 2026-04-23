@@ -1,0 +1,38 @@
+portal | :trim(:env("GOBLIN_QUERY_STRING"))
+
+if portal == ""
+    out | {
+      "ok": false,
+      "stderr": "missing portal"
+    }
+    :say(:json_stringify(out))
+
+else
+    root_base | :trim(:env("SHERIFF_ROOT"))
+
+    if root_base == ""
+        out | {
+          "ok": true,
+          "portal": portal,
+          "state": "idle",
+          "message": "local mode",
+          "error": ""
+        }
+        :say(:json_stringify(out))
+    else
+        status_path | "{root_base}/data/upload-status/{portal}.json"
+
+        if :file_exists(status_path)
+            :say(:read_text(status_path))
+        else
+            out | {
+              "ok": true,
+              "portal": portal,
+              "state": "idle",
+              "message": "no upload started",
+              "error": ""
+            }
+            :say(:json_stringify(out))
+        xx
+    xx
+xx

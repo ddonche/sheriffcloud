@@ -1,0 +1,125 @@
+portal | :trim(:env("GOBLIN_QUERY_STRING"))
+root_base | :trim(:env("SHERIFF_ROOT"))
+
+if root_base == ""
+    root_base |= ".."
+xx
+
+root | "{root_base}/site/portals/{portal}"
+
+if portal == ""
+    out | {
+      "ok": false,
+      "stderr": "missing portal name",
+      "files": []
+    }
+
+    :say(:json_stringify(out))
+
+elif :file_exists(root) == false
+    out | {
+      "ok": false,
+      "stderr": "portal not found",
+      "files": []
+    }
+
+    :say(:json_stringify(out))
+
+else
+    files | []
+
+    content_root | "{root}/content"
+    if :file_exists(content_root)
+        markdown_files | :walk(content_root, "**/*.md")
+
+        for file in markdown_files
+            file_norm | "" + file
+            :update_where!(file_norm, "\\", "/")
+
+            prefix | "{root}/"
+            :update_where!(prefix, "\\", "/")
+            rel | :keep_after(file_norm, prefix)
+
+            if rel == ""
+                rel |= file_norm
+            xx
+
+            :put_last!(files, rel)
+        xx
+    xx
+
+    blog_root | "{root}/blog"
+    if :file_exists(blog_root)
+        blog_files | :walk(blog_root, "**/*")
+
+        for file in blog_files
+            file_norm | "" + file
+            :update_where!(file_norm, "\\", "/")
+
+            prefix | "{root}/"
+            :update_where!(prefix, "\\", "/")
+            rel | :keep_after(file_norm, prefix)
+
+            if rel == ""
+                rel |= file_norm
+            xx
+
+            :put_last!(files, rel)
+        xx
+    xx
+
+    public_root | "{root}/public"
+    if :file_exists(public_root)
+        public_files | :walk(public_root, "**/*")
+
+        for file in public_files
+            file_norm | "" + file
+            :update_where!(file_norm, "\\", "/")
+
+            prefix | "{root}/"
+            :update_where!(prefix, "\\", "/")
+            rel | :keep_after(file_norm, prefix)
+
+            if rel == ""
+                rel |= file_norm
+            xx
+
+            :put_last!(files, rel)
+        xx
+    xx
+
+    root_configs | [
+      "config.yall",
+      "nav.yall",
+      "assets.yall",
+      "widgets.yall"
+    ]
+
+    for name in root_configs
+        full | "{root}/{name}"
+
+        if :file_exists(full)
+            :put_last!(files, name)
+        xx
+    xx
+
+    theme_files | [
+      "themes/outpost/override.css",
+      "themes/outpost/templates.yall"
+    ]
+
+    for name in theme_files
+        full | "{root}/{name}"
+
+        if :file_exists(full)
+            :put_last!(files, name)
+        xx
+    xx
+
+    out | {
+      "ok": true,
+      "files": files
+    }
+
+    :say(:json_stringify(out))
+xx

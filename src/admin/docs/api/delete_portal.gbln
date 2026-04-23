@@ -1,0 +1,20 @@
+portal | :trim(:env("GOBLIN_QUERY_STRING"))
+
+root_base | :trim(:env("SHERIFF_ROOT"))
+
+if root_base == ""
+    root_base |= ".."
+xx
+
+root  | "{root_base}/site/portals/{portal}"
+root2 | "{root_base}/dist/portals/{portal}"
+
+:delete_path!(root)
+:delete_path!(root2)
+
+out | {
+  "ok": true,
+  "portal": portal
+}
+
+:say(:json_stringify(out))
