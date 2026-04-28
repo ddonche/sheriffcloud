@@ -7,3 +7,4 @@
 !og-server.mjs
 !sheriff-core/**
 !site/**
+!auth-proxy/**

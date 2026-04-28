@@ -2547,6 +2547,355 @@ a.sheriff-missing-link:hover {
 }
 
 /* ========================================================================== */
+/* WIKI PAGE LAYOUT                                                           */
+/* ========================================================================== */
+
+/* Wiki article: same flex behavior as docs but wider max-width to            */
+/* accommodate infobox float without squeezing the text column too hard.      */
+.sheriff-wiki-article {
+  max-width: 52rem;
+}
+
+/* Wiki sidebar: slightly wider than TOC to fit backlinks + categories comfy  */
+.sheriff-wiki-sidebar {
+  width: 16rem;
+  flex: 0 0 16rem;
+}
+
+/* ========================================================================== */
+/* WIKI PAGE HEADER                                                           */
+/* ========================================================================== */
+
+/* No byline in wiki — tighten up the header spacing accordingly              */
+.sheriff-wiki-page-header {
+  margin-bottom: 1.5rem;
+}
+
+/* ========================================================================== */
+/* WIKI PAGE TABS (Edit / History / What Links Here)                          */
+/* ========================================================================== */
+
+.sheriff-wiki-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin: 0.75rem 0 0 0;
+  border-bottom: 1px solid var(--sheriff-border);
+}
+
+.sheriff-wiki-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.85rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--sheriff-muted);
+  text-decoration: none;
+  border: 1px solid transparent;
+  border-bottom: none;
+  margin-bottom: -1px;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  cursor: pointer;
+  background: transparent;
+}
+
+.sheriff-wiki-tab:hover {
+  color: var(--sheriff-link-hover);
+  background: var(--sheriff-panel);
+  border-color: var(--sheriff-border);
+}
+
+.sheriff-wiki-tab.active {
+  color: var(--sheriff-text);
+  background: var(--sheriff-bg);
+  border-color: var(--sheriff-border);
+}
+
+/* ========================================================================== */
+/* WIKI INFOBOX                                                                */
+/* ========================================================================== */
+
+/* The slot div floats right; infobox lives inside it                         */
+.sheriff-wiki-infobox-slot {
+  float: right;
+  clear: right;
+  margin: 0 0 1.25rem 1.75rem;
+  max-width: 16rem;
+  width: 16rem;
+}
+
+/* Nothing in the slot = no footprint */
+.sheriff-wiki-infobox-slot:empty {
+  display: none;
+}
+
+/* Infobox frame */
+.sheriff-wiki-infobox {
+  width: 100%;
+  border: 1px solid var(--sheriff-border);
+  background: var(--sheriff-panel);
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+/* Infobox title bar */
+.sheriff-wiki-infobox-title {
+  display: block;
+  padding: 0.5rem 0.75rem;
+  background: var(--sheriff-link);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+/* Infobox image (full width inside box) */
+.sheriff-wiki-infobox-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-bottom: 1px solid var(--sheriff-border);
+}
+
+.sheriff-wiki-infobox-image-caption {
+  display: block;
+  padding: 0.35rem 0.75rem 0.5rem;
+  font-size: 0.78rem;
+  color: var(--sheriff-muted);
+  text-align: center;
+  border-bottom: 1px solid var(--sheriff-border);
+}
+
+/* Infobox rows */
+.sheriff-wiki-infobox-row {
+  display: flex;
+  border-bottom: 1px solid var(--sheriff-border);
+}
+
+.sheriff-wiki-infobox-row:last-child {
+  border-bottom: none;
+}
+
+.sheriff-wiki-infobox-label {
+  flex: 0 0 40%;
+  padding: 0.35rem 0.6rem;
+  font-weight: 600;
+  color: var(--sheriff-muted);
+  font-size: 0.78rem;
+  border-right: 1px solid var(--sheriff-border);
+  background: rgba(0,0,0,0.08);
+}
+
+[data-theme="light"] .sheriff-wiki-infobox-label {
+  background: rgba(0,0,0,0.04);
+}
+
+.sheriff-wiki-infobox-value {
+  flex: 1;
+  padding: 0.35rem 0.6rem;
+  color: var(--sheriff-text);
+}
+
+.sheriff-wiki-infobox-value a {
+  color: var(--sheriff-link);
+  text-decoration: none;
+}
+
+.sheriff-wiki-infobox-value a:hover {
+  color: var(--sheriff-link-hover);
+}
+
+/* Section divider inside infobox (optional) */
+.sheriff-wiki-infobox-section {
+  display: block;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--sheriff-muted);
+  background: rgba(0,0,0,0.06);
+  border-bottom: 1px solid var(--sheriff-border);
+  text-align: center;
+}
+
+/* ========================================================================== */
+/* WIKI CATEGORIES (article footer)                                           */
+/* ========================================================================== */
+
+.sheriff-wiki-categories {
+  margin-top: 2.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--sheriff-border);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+}
+
+.sheriff-wiki-categories-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--sheriff-muted);
+  margin-right: 0.25rem;
+  flex-shrink: 0;
+}
+
+.sheriff-wiki-category-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid var(--sheriff-border);
+  background: var(--sheriff-panel);
+  color: var(--sheriff-link);
+  text-decoration: none;
+  font-size: 0.75rem;
+  font-weight: 500;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.sheriff-wiki-category-tag:hover {
+  border-color: var(--sheriff-link-hover);
+  color: var(--sheriff-link-hover);
+  background: rgba(77, 184, 176, 0.06);
+}
+
+/* ========================================================================== */
+/* WIKI SIDEBAR — WHAT LINKS HERE                                             */
+/* ========================================================================== */
+
+.sheriff-wiki-backlinks {
+  margin-bottom: 1.5rem;
+}
+
+.sheriff-wiki-backlinks-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--sheriff-muted);
+  margin: 0 0 0.65rem 0;
+}
+
+.sheriff-wiki-backlinks-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.sheriff-wiki-backlinks-list li {
+  margin: 0;
+}
+
+.sheriff-wiki-backlinks-list a {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--sheriff-link);
+  text-decoration: none;
+  line-height: 1.4;
+  transition: color 0.15s ease;
+}
+
+.sheriff-wiki-backlinks-list a:hover {
+  color: var(--sheriff-link-hover);
+}
+
+/* Empty state */
+.sheriff-wiki-backlinks-empty {
+  font-size: 0.78rem;
+  color: var(--sheriff-muted);
+  font-style: italic;
+}
+
+/* ========================================================================== */
+/* WIKI SIDEBAR — CATEGORIES NAV                                              */
+/* ========================================================================== */
+
+.sheriff-wiki-categories-nav {
+  margin-bottom: 1.5rem;
+}
+
+.sheriff-wiki-categories-nav-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--sheriff-muted);
+  margin: 0 0 0.65rem 0;
+}
+
+.sheriff-wiki-categories-nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.sheriff-wiki-categories-nav-list li {
+  margin: 0;
+}
+
+.sheriff-wiki-categories-nav-list a {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--sheriff-link);
+  text-decoration: none;
+  line-height: 1.4;
+  transition: color 0.15s ease;
+}
+
+.sheriff-wiki-categories-nav-list a:hover {
+  color: var(--sheriff-link-hover);
+}
+
+/* Active category */
+.sheriff-wiki-categories-nav-list a.active {
+  color: var(--sheriff-link-hover);
+  font-weight: 600;
+}
+
+/* ========================================================================== */
+/* RESPONSIVE                                                                 */
+/* ========================================================================== */
+
+@media (max-width: 960px) {
+  /* Infobox: full-width, stop floating on narrow screens */
+  .sheriff-wiki-infobox-slot {
+    float: none;
+    width: 100%;
+    max-width: 100%;
+    margin: 0 0 1.5rem 0;
+  }
+
+  .sheriff-wiki-sidebar {
+    width: 100%;
+    flex: none;
+  }
+}
+
+@media (max-width: 640px) {
+  /* Tabs: tighten padding on small screens */
+  .sheriff-wiki-tab {
+    padding: 0.3rem 0.55rem;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+  }
+}
+
+/* ========================================================================== */
 /* RESPONSIVE                                                                 */
 /* ========================================================================== */
 

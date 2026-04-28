@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { getSupabase } from '../supabase'
+import { getSupabase } from '../../shared/supabase'
 import { Icon } from '../Icons'
 
 interface Props {

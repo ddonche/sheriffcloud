@@ -10,10 +10,11 @@ import SerialPage from './pages/SerialPage'
 import CollectionPage from './pages/CollectionPage'
 import CodexIndex from './pages/CodexIndex'
 import NotFound from './pages/NotFound'
-import { getSupabase } from './supabase'
+import { getSupabase } from '../shared/supabase'
 import './themes/spur/spur.css'
 import './themes/spur/blog.css'
 import './themes/spur/serial.css'
+import { navigateCrossDomain } from '../shared/crossDomainNav'
 
 function App() {
   const navigate = useNavigate()
@@ -104,7 +105,31 @@ function App() {
 
   const devNavigate = (path: string) => {
     const sub = new URLSearchParams(window.location.search).get('sub')
-    navigate(sub ? `${path}?sub=${sub}` : path)
+
+    if (sub) {
+      navigate(`${path}?sub=${sub}`)
+      return
+    }
+
+    if (
+      window.location.hostname === 'spur.ink' &&
+      path.startsWith('/blog/')
+    ) {
+      const targetSubdomain =
+        data &&
+        data.type !== 'not_found' &&
+        'site' in data &&
+        data.site?.subdomain
+          ? data.site.subdomain
+          : null
+
+      if (targetSubdomain) {
+        navigateCrossDomain(`https://${targetSubdomain}.spur.ink${path}`)
+        return
+      }
+    }
+
+    navigate(path)
   }
 
   const renderPage = () => {

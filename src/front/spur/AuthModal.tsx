@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { supabase } from "./supabase"
+import { supabase } from "../../shared/supabase"
 
 type AuthModalProps = {
   onClose?: () => void

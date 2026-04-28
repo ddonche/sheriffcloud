@@ -19,4 +19,6 @@ cd /app/dist/admin
 
 node /app/og-server.mjs &
 
+node /app/dist/auth-proxy/index.js &
+
 exec nginx -g 'daemon off;'

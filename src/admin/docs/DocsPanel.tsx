@@ -7,6 +7,7 @@ import {
   buildDocsSite,
   startUpload,
   getUploadStatus,
+  initPortal,
 } from "./docsApi"
 
 type Site = {
@@ -239,8 +240,59 @@ function FilesView({ activeSite, supabase }: { activeSite: Site; supabase: any }
   const [error, setError] = useState<string | null>(null)
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
 
+  // New page modal
+  const [showNewPage, setShowNewPage] = useState(false)
+  const [newPageName, setNewPageName] = useState("")
+  const [newPageFolder, setNewPageFolder] = useState("content")
+  const [creatingPage, setCreatingPage] = useState(false)
+
   const fileTree = useMemo(() => buildFileTree(files), [files])
   const dirty = content !== savedContent
+
+  const newPageFolders = useMemo(() => {
+    const folders = new Set<string>(["content"])
+    for (const f of files) {
+      const parts = f.split("/")
+      let running = ""
+      for (let i = 0; i < parts.length - 1; i++) {
+        running = running ? `${running}/${parts[i]}` : parts[i]
+        if (running.startsWith("content")) folders.add(running)
+      }
+    }
+    return [...folders].sort()
+  }, [files])
+
+  function cleanSlug(value: string) {
+    return value.toLowerCase().replace(/[^a-z0-9-_]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "")
+  }
+
+  async function createPage() {
+    const slug = cleanSlug(newPageName)
+    if (!slug) return
+    setCreatingPage(true)
+    try {
+      const folder = newPageFolder || "content"
+      const path = `${folder}/${slug}.md`
+      const title = slug.replace(/-/g, " ").replace(/^./, c => c.toUpperCase())
+      await fetch(`/api/create_file?${activeSite.subdomain}&${path}&${title}`)
+      setFiles(prev => prev.includes(path) ? prev : [...prev, path].sort())
+      const parts = path.split("/")
+      let running = ""
+      const folders = new Set(expandedFolders)
+      for (let i = 0; i < parts.length - 1; i++) {
+        running = running ? `${running}/${parts[i]}` : parts[i]
+        folders.add(running)
+      }
+      setExpandedFolders(folders)
+      setShowNewPage(false)
+      setNewPageName("")
+      await openFile(path)
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setCreatingPage(false)
+    }
+  }
 
   async function loadFiles() {
     setLoadingFiles(true)
@@ -327,15 +379,19 @@ function FilesView({ activeSite, supabase }: { activeSite: Site; supabase: any }
   }, [activeSite.id])
 
   return (
+    <>
     <div style={{ display: "grid", gridTemplateColumns: "300px minmax(0, 1fr)", gap: 16, minHeight: 0, flex: 1 }}>
       <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 14, display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden" }}>
         <div style={{ padding: "14px 16px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ fontSize: 11, fontWeight: 800, color: C.dim, letterSpacing: "0.08em", textTransform: "uppercase" }}>Files</div>
-          <button type="button" onClick={loadFiles} disabled={loadingFiles}
-            style={{ border: `1px solid ${C.borderStrong}`, background: C.panel, color: C.text, borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer", opacity: loadingFiles ? 0.5 : 1 }}
-          >
-            {loadingFiles ? "Loading…" : "Refresh"}
-          </button>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button type="button" onClick={() => { setNewPageName(""); setNewPageFolder(newPageFolders[0] ?? "content"); setShowNewPage(true) }}
+              style={{ border: "none", background: C.accent, color: "#fff", borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 800, cursor: "pointer" }}
+            >+ New</button>
+            <button type="button" onClick={loadFiles} disabled={loadingFiles}
+              style={{ border: `1px solid ${C.borderStrong}`, background: C.panel, color: C.text, borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer", opacity: loadingFiles ? 0.5 : 1 }}
+            >{loadingFiles ? "Loading…" : "Refresh"}</button>
+          </div>
         </div>
         <div style={{ flex: 1, overflowY: "auto" }}>
           {error && <div style={{ padding: "12px 16px", fontSize: 13, color: C.error, background: C.errorBg, borderBottom: `1px solid #fecaca` }}>{error}</div>}
@@ -376,6 +432,48 @@ function FilesView({ activeSite, supabase }: { activeSite: Site; supabase: any }
         </div>
       </div>
     </div>
+
+    {showNewPage && (
+      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 24 }}>
+        <div style={{ background: "#fff", border: `1px solid ${C.border}`, borderRadius: 14, width: "100%", maxWidth: 420, boxShadow: "0 8px 32px rgba(0,0,0,0.18)", fontFamily: FONT }}>
+          <div style={{ padding: "16px 18px 12px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={{ fontSize: 15, fontWeight: 800, color: C.text }}>New Page</span>
+            <button type="button" onClick={() => setShowNewPage(false)} style={{ border: 0, background: "transparent", fontSize: 16, cursor: "pointer", color: C.muted }}>✕</button>
+          </div>
+          <div style={{ padding: "16px 18px", display: "grid", gap: 10 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: C.muted }}>Page name</label>
+              <input autoFocus placeholder="e.g. getting-started" value={newPageName}
+                onChange={e => setNewPageName(e.target.value)}
+                onBlur={e => setNewPageName(cleanSlug(e.target.value))}
+                onKeyDown={e => { if (e.key === "Enter") { setNewPageName(n => cleanSlug(n)); createPage() } if (e.key === "Escape") setShowNewPage(false) }}
+                style={{ border: `1px solid ${C.borderStrong}`, borderRadius: 8, padding: "10px 12px", fontSize: 14, color: C.text, background: "#fff", fontFamily: FONT }} />
+            </div>
+            {newPageName && (
+              <div style={{ fontSize: 12, color: C.accent, fontFamily: MONO, padding: "6px 10px", background: C.accentSoft, border: `1px solid ${C.accentBorder}`, borderRadius: 6 }}>
+                {newPageFolder}/{newPageName}.md
+              </div>
+            )}
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: C.muted }}>Folder</label>
+              <select value={newPageFolder} onChange={e => setNewPageFolder(e.target.value)}
+                style={{ border: `1px solid ${C.borderStrong}`, borderRadius: 8, padding: "10px 12px", fontSize: 14, color: C.text, background: "#fff", fontFamily: FONT }}>
+                {newPageFolders.map(f => <option key={f} value={f}>{f}/</option>)}
+              </select>
+            </div>
+          </div>
+          <div style={{ padding: "12px 18px 16px", borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <button type="button" onClick={() => setShowNewPage(false)} disabled={creatingPage}
+              style={{ border: `1px solid ${C.borderStrong}`, background: "#fff", color: C.text, borderRadius: 8, padding: "9px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}
+            >Cancel</button>
+            <button type="button" onClick={createPage} disabled={creatingPage || !newPageName.trim()}
+              style={{ border: "none", background: creatingPage || !newPageName.trim() ? C.dim : C.accent, color: "#fff", borderRadius: 8, padding: "9px 14px", fontSize: 13, fontWeight: 800, cursor: creatingPage || !newPageName.trim() ? "default" : "pointer" }}
+            >{creatingPage ? "Creating…" : "Create Page"}</button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   )
 }
 
@@ -397,7 +495,7 @@ function BuildView({ activeSite, supabase }: { activeSite: Site; supabase: any }
 
   async function pollUpload() {
     try {
-      const status = await getUploadStatus(activeSite.subdomain)
+      const status = await getUploadStatus(supabase, activeSite.subdomain)
       setUploadState(status.state ?? "idle")
       setUploadMessage(status.error || status.message || "")
       if (status.state === "success" || status.state === "failed") clearPoll()
@@ -413,12 +511,24 @@ function BuildView({ activeSite, supabase }: { activeSite: Site; supabase: any }
     setUploadState("idle")
     setUploadMessage("")
     clearPoll()
-
+ 
     try {
+      // Pre-flight: scaffold the portal directory if it doesn't exist yet.
+      // The server returns { ok: true, already_exists: true } if it was already
+      // there, so this is always safe to call before a build.
+      const init = await initPortal(supabase, activeSite.subdomain)
+      if (!init.ok) {
+        setBuildOk(false)
+        setBuildOutput(`BUILD FAILED — ${activeSite.name}\n\nPortal init failed: ${init.message ?? "unknown error"}`)
+        return
+      }
+ 
+      const initNote = init.already_exists ? "" : `Portal scaffolded — ${activeSite.subdomain}\n\n`
+ 
       const res = await buildDocsSite(supabase, activeSite.subdomain)
       const ok = res.ok && res.code === 0
       setBuildOk(ok)
-
+ 
       const lines = [
         ok ? `BUILD SUCCESS — ${activeSite.name}` : `BUILD FAILED — ${activeSite.name}`,
         "=".repeat(40),
@@ -433,12 +543,12 @@ function BuildView({ activeSite, supabase }: { activeSite: Site; supabase: any }
         "------",
         res.stderr || "(none)",
       ]
-      setBuildOutput(lines.join("\n"))
-
+      setBuildOutput(initNote + lines.join("\n"))
+ 
       if (ok) {
         setUploadState("starting")
         try {
-          await startUpload(activeSite.subdomain)
+          await startUpload(supabase, activeSite.subdomain)
           pollRef.current = setInterval(pollUpload, 2000)
         } catch (e: any) {
           setUploadState("failed")
@@ -486,9 +596,9 @@ function BuildView({ activeSite, supabase }: { activeSite: Site; supabase: any }
         )}
       </div>
 
-      <div style={{ background: C.dark, border: `1px solid ${C.dark2}`, borderRadius: 14, padding: 16, minHeight: 420, display: "flex", flexDirection: "column" }}>
+      <div style={{ background: C.dark, border: `1px solid ${C.dark2}`, borderRadius: 14, padding: 16, minHeight: 420, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         <div style={{ fontSize: 11, fontWeight: 800, color: "#94a3b8", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10 }}>Build Output</div>
-        <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word", color: C.darkText, fontSize: 12, lineHeight: 1.6, fontFamily: MONO, flex: 1 }}>
+        <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word", overflowWrap: "break-word", overflowX: "hidden", color: C.darkText, fontSize: 12, lineHeight: 1.6, fontFamily: MONO, flex: 1 }}>
           {buildOutput ?? "No build run yet."}
         </pre>
       </div>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { Link } from "react-router-dom"
+import { navigateCrossDomain } from "../../shared/crossDomainNav"
 
 type SiteHeaderProps = {
   userEmail?: string | null
@@ -129,15 +130,15 @@ export default function SiteHeader({
               </span>
             </Link>
 
-            <a
-              href="/spur"
+            <button
+              type="button"
               className="topnav-link"
-              onClick={closeMenu}
+              onClick={() => { closeMenu(); navigateCrossDomain("https://spur.ink") }}
             >
               <span className="nav-link-inner">
                 <span>Spur</span>
               </span>
-            </a>
+            </button>
           </nav>
 
           <div className="topbar-actions">
@@ -188,9 +189,13 @@ export default function SiteHeader({
                 <Link to="/" className="button button-ghost" onClick={closeMenu}>
                   Sheriff
                 </Link>
-                <a href="/spur" className="button button-primary" onClick={closeMenu}>
+                <button
+                  type="button"
+                  className="button button-primary"
+                  onClick={() => { closeMenu(); navigateCrossDomain("https://spur.ink") }}
+                >
                   Spur
-                </a>
+                </button>
               </>
             )}
           </div>

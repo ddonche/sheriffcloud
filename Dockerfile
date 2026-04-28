@@ -20,6 +20,16 @@ COPY . /app
 
 RUN npm install --prefix /app @supabase/supabase-js
 
+# Build auth proxy
+RUN npm install --prefix /app/auth-proxy && \
+    mkdir -p /app/dist/auth-proxy && \
+    npx --prefix /app/auth-proxy esbuild auth-proxy/index.ts \
+      --bundle \
+      --platform=node \
+      --target=node18 \
+      --outfile=/app/dist/auth-proxy/index.js \
+      --external:@supabase/supabase-js
+
 RUN chmod +x /app/goblin /app/start.sh /app/sync_portal.sh && \
     ln -sf /app/goblin /usr/local/bin/goblin
 

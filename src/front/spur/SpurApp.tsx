@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Routes, Route, useNavigate, useParams, Link } from "react-router-dom"
-import { supabase } from "./supabase"
+import { supabase } from "../../shared/supabase"
 import { AuthModal } from "./AuthModal"
 import PricingPage from "./PricingPage"
 import AboutPage from "./AboutPage"
@@ -14,6 +14,7 @@ import { SpurPanel } from "./spur/SpurPanel"
 import CreateBlogModal from "./CreateBlogModal"
 import { SpurPostEditor } from "./spur/SpurPostEditor"
 import SpurFooter from "./components/SpurFooter"
+import { navigateCrossDomain } from "../../shared/crossDomainNav"
 
 // ── Hooks ─────────────────────────────────────────────────────────────────────
 
@@ -158,6 +159,26 @@ function postHref(post: SpurPost): string {
     ? `https://${post.site_subdomain}.sheriffcloud.com`
     : `https://${post.site_subdomain}.spur.ink`
   return `${base}/blog/${post.slug}`
+}
+
+function serialHref(serial: {
+  site_origin: string
+  site_subdomain: string
+  slug: string
+}): string {
+  const base = serial.site_origin === "sheriffcloud"
+    ? `https://${serial.site_subdomain}.sheriffcloud.com`
+    : `https://${serial.site_subdomain}.spur.ink`
+
+  return `${base}/blog/serial/${serial.slug}`
+}
+
+function handleCrossDomainClick(
+  e: React.MouseEvent<HTMLAnchorElement>,
+  href: string
+) {
+  e.preventDefault()
+  navigateCrossDomain(href)
 }
 
 function hotScore(post: SpurPost): number {
@@ -550,6 +571,7 @@ function TopCard({ post }: { post: SpurPost }) {
   return (
     <a
       href={postHref(post)}
+      onClick={(e) => handleCrossDomainClick(e, postHref(post))}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
@@ -607,6 +629,7 @@ function DiscoveryPostCard({ post }: { post: SpurPost }) {
   return (
     <a
       href={postHref(post)}
+      onClick={(e) => handleCrossDomainClick(e, postHref(post))}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
@@ -699,6 +722,7 @@ function ListRowCard({ post }: { post: SpurPost }) {
   return (
     <a
       href={postHref(post)}
+      onClick={(e) => handleCrossDomainClick(e, postHref(post))}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
@@ -776,6 +800,7 @@ function Sidebar({
             <a
               key={post.id}
               href={postHref(post)}
+              onClick={(e) => handleCrossDomainClick(e, postHref(post))}
               style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 0", borderBottom: i < trending.length - 1 ? `1px solid ${C.borderLight}` : "none", textDecoration: "none", color: "inherit" }}
             >
               <span style={{ fontSize: 18, fontWeight: 900, color: C.borderLight, letterSpacing: "-0.04em", width: 22, flexShrink: 0, lineHeight: 1, paddingTop: 1 }}>
@@ -800,11 +825,8 @@ function Sidebar({
             Serial Spotlight
           </div>
           <a
-            href={
-              serial.site_origin === "sheriffcloud"
-                ? `https://${serial.site_subdomain}.sheriffcloud.com/blog/serial/${serial.slug}`
-                : `https://${serial.site_subdomain}.spur.ink/blog/serial/${serial.slug}`
-            }
+            href={serialHref(serial)}
+            onClick={(e) => handleCrossDomainClick(e, serialHref(serial))}
             style={{ display: "block", background: C.surface, border: `1px solid ${C.borderLight}`, borderRadius: 12, overflow: "hidden", textDecoration: "none", color: "inherit" }}
           >
             {serial.cover_image_url ? (
@@ -1582,7 +1604,7 @@ function SpurAppRoutes() {
     onStartWriting: handleStartWriting,
     onNewPost: handleNewPost,
     onNewBlog: () => setShowCreateBlogModal(true),
-    onDashboard: () => navigate("/admin"),
+    onDashboard: () => navigateCrossDomain("https://sheriffcloud.com/admin"),
     canCreateBlog,
     darkMode,
     onToggleTheme: () => setDarkMode((v) => !v),

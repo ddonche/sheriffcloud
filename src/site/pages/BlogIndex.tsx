@@ -3,6 +3,7 @@ import type { BlogIndexResponse, Post, SpurAuthor } from '../lib/types'
 import PostCard from '../components/PostCard'
 import PostList from '../components/PostList'
 import { Icon } from '../Icons'
+import { navigateCrossDomain } from '../../shared/crossDomainNav'
 
 interface Props {
   data: BlogIndexResponse
@@ -101,6 +102,21 @@ export default function BlogIndex({ data, darkMode, onNavigate, onPrefetch }: Pr
     .filter(p => !activeCategory || (p as Post & { category_id?: string | null }).category_id === activeCategory)
     .filter(p => !activeAuthor || p.author_id === activeAuthor)
     .filter(p => activeFilters.size === 0 || [...activeFilters].every(type => hasMetaType(p, type)))
+
+  function openPost(post: Post) {
+    const path = `/blog/${post.slug}`
+
+    if (window.location.hostname === 'spur.ink') {
+      const subdomain = (site as any).subdomain
+
+      if (subdomain) {
+        navigateCrossDomain(`https://${subdomain}.spur.ink${path}`)
+        return
+      }
+    }
+
+    onNavigate(path)
+  }
 
   return (
     <div className="page-container">
@@ -296,7 +312,7 @@ export default function BlogIndex({ data, darkMode, onNavigate, onPrefetch }: Pr
                 post={post}
                 author={authorsMap.get(post.author_id) ?? authors[0]}
                 darkMode={darkMode}
-                onClick={() => onNavigate(`/blog/${post.slug}`)}
+                onClick={() => openPost(post)}
                 onHover={() => onPrefetch(`/blog/${post.slug}`)}
                 onDiscoveryClick={(slug) => onNavigate(`/discover/${slug}`)}
                 onSerialClick={(slug) => onNavigate(`/blog/serial/${slug}`)}
@@ -312,7 +328,7 @@ export default function BlogIndex({ data, darkMode, onNavigate, onPrefetch }: Pr
               post={post}
               author={authorsMap.get(post.author_id) ?? authors[0]}
               darkMode={darkMode}
-              onClick={() => onNavigate(`/blog/${post.slug}`)}
+              onClick={() => openPost(post)}
               onHover={() => onPrefetch(`/blog/${post.slug}`)}
               onSerialClick={(slug) => onNavigate(`/blog/serial/${slug}`)}
             />

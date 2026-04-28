@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { getSupabase } from "../../admin/supabase"
+import { getSupabase } from "../supabase"
 
 type AuthState = {
   userEmail: string | null

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Site } from '../lib/types'
-import { getSupabase } from '../supabase'
+import { getSupabase } from '../../shared/supabase'
+import { navigateCrossDomain } from '../../shared/crossDomainNav'
 import { initials } from '../lib/api'
 import AuthModal from './AuthModal'
 
@@ -142,25 +143,21 @@ export default function SiteHeader({
                     <div className="site-header__dropdown-name">{displayName}</div>
 
                     {isPostPage && isAuthor && (
-                      <a
-                        href="https://admin.sheriffcloud.com"
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <button
                         className="site-header__dropdown-item"
+                        onClick={() => navigateCrossDomain('https://sheriffcloud.com/admin')}
                       >
                         Edit Post
-                      </a>
+                      </button>
                     )}
 
                     {profile?.is_admin && (
-                      <a
-                        href="https://admin.sheriffcloud.com"
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <button
                         className="site-header__dropdown-item"
+                        onClick={() => navigateCrossDomain('https://sheriffcloud.com/admin')}
                       >
                         Admin Panel
-                      </a>
+                      </button>
                     )}
 
                     <button

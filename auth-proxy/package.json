@@ -1,0 +1,11 @@
+{
+  "name": "auth-proxy",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "@supabase/supabase-js": "*"
+  },
+  "devDependencies": {
+    "esbuild": "^0.20.0"
+  }
+}

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { Post, Author } from '../lib/types'
 import { firstImageFromContent, formatDate, authorName, initials } from '../lib/api'
 import { Icon } from '../Icons'
-import { getSupabase } from '../supabase'
+import { getSupabase } from '../../shared/supabase'
 
 interface Props {
   post: Post

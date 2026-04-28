@@ -6,7 +6,7 @@ import FloatingBar from '../components/FloatingBar'
 import LikeButton from '../components/LikeButton'
 import Comments from '../components/Comments'
 import PostList from '../components/PostList'
-import { getSupabase } from '../supabase'
+import { getSupabase } from '../../shared/supabase'
 
 interface Props {
   data: BlogPostResponse

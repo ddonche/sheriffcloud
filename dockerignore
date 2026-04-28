@@ -1,8 +1,0 @@
-*
-!dist/**
-!goblin
-!start.sh
-!sync_portal.sh
-!nginx.conf
-!og-server.mjs
-!sheriff-core/**

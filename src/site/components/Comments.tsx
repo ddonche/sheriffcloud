@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { getSupabase } from '../supabase'
+import { getSupabase } from '../../shared/supabase'
 import { initials } from '../lib/api'
 
 interface Comment {

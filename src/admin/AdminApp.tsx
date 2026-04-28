@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { getSupabase } from "./supabase"
+import { getSupabase } from "../shared/supabase"
 import AuthModal from "./components/AuthModal"
 import SiteHeader from "./components/SiteHeader"
 import { SpurPanel } from "./spur/SpurPanel"

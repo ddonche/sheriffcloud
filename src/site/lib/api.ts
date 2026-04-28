@@ -1,4 +1,4 @@
-import { getSupabase } from '../supabase'
+import { getSupabase } from '../../shared/supabase'
 import type { RouterResponse } from './types'
 
 const SUPABASE_URL = 'https://ukyjfstfoaybvzwplrwx.supabase.co'

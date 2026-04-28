@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { useParams, useNavigate } from "react-router-dom"
-import { supabase } from "../spur/supabase"
+import { supabase } from "../../shared/supabase"
 import { Icon } from "../spur/Icons"
 import SpurHeader from "../spur/components/SpurHeader"
 import SpurFooter from "../spur/components/SpurFooter"

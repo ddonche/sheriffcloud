@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { SerialPageResponse, SerialChapter } from '../lib/types'
 import { formatDate } from '../lib/api'
-import { getSupabase } from '../supabase'
+import { getSupabase } from '../../shared/supabase'
 
 interface Props {
   data: SerialPageResponse
