@@ -91,7 +91,11 @@ function Avatar({ role }: { role: string }) {
   )
 }
 
-function AiPanel({ supabase }: { supabase: any }) {
+function AiPanel({ supabase, onInsufficientCredits, onTurnComplete }: {
+  supabase: any
+  onInsufficientCredits?: () => void
+  onTurnComplete?: () => void
+}) {
   const [sessions, setSessions] = useState<AiSession[]>([])
   const [selectedSession, setSelectedSession] = useState<AiSession | null>(null)
   const [messages, setMessages] = useState<AiMessage[]>([])
@@ -116,6 +120,7 @@ function AiPanel({ supabase }: { supabase: any }) {
   const [listening, setListening] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [copiedAll, setCopiedAll] = useState(false)
+  const [costMap, setCostMap] = useState<Record<string, number>>({})
 
   // ── Attachment state ──────────────────────────────────────────────────────
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null)
@@ -189,6 +194,7 @@ function AiPanel({ supabase }: { supabase: any }) {
     if (!el) return
     setTimeout(() => { el.scrollTop = el.scrollHeight }, 0)
   }, [messages])
+
   useEffect(() => {
     function onMouseMove(e: MouseEvent) {
       if (!isDragging.current) return
@@ -265,6 +271,7 @@ function AiPanel({ supabase }: { supabase: any }) {
     await loadSessions()
     if (data.session) await selectSession(data.session)
   }
+
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -281,7 +288,6 @@ function AiPanel({ supabase }: { supabase: any }) {
     } else {
       setAttachmentPreview(null)
     }
-    // reset input so same file can be re-selected
     e.target.value = ""
   }
 
@@ -319,11 +325,15 @@ function AiPanel({ supabase }: { supabase: any }) {
       attachment_type: attachmentTypeFinal,
     })
     setLoading(false)
-    if (error || !data?.ok) { setError(error?.message || data?.error || "Failed to add message"); return }
+    if (error || !data?.ok) {
+      if (data?.error === "insufficient_credits") { onInsufficientCredits?.(); return }
+      setError(error?.message || data?.error || "Failed to add message"); return
+    }
     setUserMessage("")
     clearAttachment()
     await loadMessages(selectedSession.id)
   }
+
   async function runTurn(model?: string) {
     if (!selectedSession) return
     setRunningModel(model ?? "auto"); setError(null)
@@ -331,9 +341,17 @@ function AiPanel({ supabase }: { supabase: any }) {
       session_id: selectedSession.id, ...(model ? { model } : {}), mode: selectedSession.mode ?? "balanced",
     })
     setRunningModel(null)
-    if (error || !data?.ok) { setError(error?.message || data?.error || "Failed to run turn"); return }
+    if (error || !data?.ok) {
+      if (data?.error === "insufficient_credits") { onInsufficientCredits?.(); return }
+      setError(error?.message || data?.error || "Failed to run turn"); return
+    }
+    if (data?.cost_usd != null && data?.message?.id) {
+      setCostMap(prev => ({ ...prev, [data.message.id]: data.cost_usd }))
+    }
     await loadMessages(selectedSession.id)
+    onTurnComplete?.()
   }
+
   async function saveCredentials() {
     setLoading(true); setError(null)
     try {
@@ -349,6 +367,7 @@ function AiPanel({ supabase }: { supabase: any }) {
       setError(err.message || "Failed to save credentials")
     } finally { setLoading(false) }
   }
+
   async function deleteSession(id: string, e: React.MouseEvent) {
     e.stopPropagation()
     if (!confirm("Delete this session and all its messages?")) return
@@ -384,7 +403,6 @@ function AiPanel({ supabase }: { supabase: any }) {
           Sessions
         </span>
         <div style={{ display: "flex", gap: 4 }}>
-          {/* API Keys button */}
           <button onClick={() => { setShowCredentials(v => !v); setShowNewForm(false) }} title="API Keys"
             style={{
               width: 42, height: 42, display: "flex", alignItems: "center", justifyContent: "center",
@@ -396,7 +414,6 @@ function AiPanel({ supabase }: { supabase: any }) {
               <path d="M400 416C497.2 416 576 337.2 576 240C576 142.8 497.2 64 400 64C302.8 64 224 142.8 224 240C224 258.7 226.9 276.8 232.3 293.7L71 455C66.5 459.5 64 465.6 64 472L64 552C64 565.3 74.7 576 88 576L168 576C181.3 576 192 565.3 192 552L192 512L232 512C245.3 512 256 501.3 256 488L256 448L296 448C302.4 448 308.5 445.5 313 441L346.3 407.7C363.2 413.1 381.3 416 400 416zM440 160C462.1 160 480 177.9 480 200C480 222.1 462.1 240 440 240C417.9 240 400 222.1 400 200C400 177.9 417.9 160 440 160z"/>
             </svg>
           </button>
-          {/* New session button */}
           <button onClick={() => { if (showNewForm) { closeNewForm() } else { setShowNewForm(true); setShowCredentials(false) } }} title="New Session"
             style={{
               width: 42, height: 42, display: "flex", alignItems: "center", justifyContent: "center",
@@ -468,7 +485,7 @@ function AiPanel({ supabase }: { supabase: any }) {
                   )}
                 </div>
               )
-              })}
+            })}
             <button onClick={saveCredentials} disabled={loading}
               style={{ padding: "11px", background: "#e040a0", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}>
               Save Keys
@@ -548,7 +565,6 @@ function AiPanel({ supabase }: { supabase: any }) {
             <div style={{ borderTop: `1px solid ${C.sidebarBorder}`, paddingTop: 12, display: "grid", gap: 8 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  {/* Toggle */}
                   <button
                     type="button"
                     onClick={() => {
@@ -581,7 +597,6 @@ function AiPanel({ supabase }: { supabase: any }) {
                     <span style={{ fontSize: 11, color: "#22c55e", fontWeight: 700, fontFamily: FONT }}>set</span>
                   )}
                 </div>
-                {/* Edit / Add button */}
                 <button
                   type="button"
                   onClick={() => {
@@ -734,13 +749,13 @@ function AiPanel({ supabase }: { supabase: any }) {
 
   // ── Chat area header ──────────────────────────────────────────────────────
   function renderChatHeader() {
-    const mode = selectedSession ? AI_MODES.find(m => m.id === (selectedSession.mode ?? "balanced")) : null
     const participants: AiProvider[] = selectedSession?.participants ?? (selectedSession ? [selectedSession.first_speaker as AiProvider] : [])
+    const mode = AI_MODES.find(m => m.id === (selectedSession?.mode ?? "balanced"))
     return (
       <div style={{
-        height: 64, padding: "0 28px",
+        height: 64, padding: "0 24px",
+        display: "flex", alignItems: "center", gap: 12,
         borderBottom: `1px solid ${C.chatBorder}`,
-        display: "flex", alignItems: "center", gap: 14,
         background: "#fff", flexShrink: 0,
       }}>
         {selectedSession ? (
@@ -864,6 +879,11 @@ function AiPanel({ supabase }: { supabase: any }) {
                     <span style={{ fontSize: 12, color: C.textMuted, fontFamily: FONT }}>
                       {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                     </span>
+                    {!isUser && costMap[m.id] != null && (
+                      <span style={{ fontSize: 11, color: "#22c55e", fontFamily: FONT, fontWeight: 600 }}>
+                        ${costMap[m.id].toFixed(5)}
+                      </span>
+                    )}
                   </div>
                   <div style={{ position: "relative" }}>
                     <button
@@ -919,6 +939,63 @@ function AiPanel({ supabase }: { supabase: any }) {
               </div>
             )
           })}
+
+          {/* Thinking bubble */}
+          {anyRunning && selectedSession && (
+            <div style={{
+              display: "flex", gap: 16, padding: "8px 32px",
+              flexDirection: "row", alignItems: "flex-start",
+            }}>
+              {(() => {
+                const speakerId = runningModel === "auto"
+                  ? (selectedSession.participants?.[0] ?? "chatgpt")
+                  : runningModel as AiProvider
+                const p = AI_PROVIDERS.find(x => x.id === speakerId)
+                const color = p?.color ?? C.textMuted
+                const label = p?.label ?? speakerId
+                return (
+                  <>
+                    <div style={{
+                      width: 38, height: 38, borderRadius: "50%", flexShrink: 0,
+                      background: color + "20", border: `2px solid ${color}55`,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 14, fontWeight: 700, color, fontFamily: FONT,
+                    }}>
+                      {label.charAt(0)}
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color, fontFamily: FONT }}>{label}</span>
+                      <div style={{
+                        padding: "14px 20px",
+                        background: color + "0d",
+                        border: `1px solid ${color}33`,
+                        borderRadius: "4px 18px 18px 18px",
+                        display: "flex", alignItems: "center", gap: 6,
+                      }}>
+                        <style>{`
+                          @keyframes thinking-dot {
+                            0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+                            40% { transform: scale(1); opacity: 1; }
+                          }
+                        `}</style>
+                        {[0, 1, 2].map(i => (
+                          <div key={i} style={{
+                            width: 8, height: 8, borderRadius: "50%",
+                            background: color,
+                            animation: `thinking-dot 1.2s ease-in-out ${i * 0.2}s infinite`,
+                          }} />
+                        ))}
+                        <span style={{ fontSize: 13, color, fontFamily: FONT, marginLeft: 4, fontWeight: 500 }}>
+                          thinking…
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                )
+              })()}
+            </div>
+          )}
+
           <div ref={messagesEndRef} />
         </div>
 
@@ -952,56 +1029,56 @@ function AiPanel({ supabase }: { supabase: any }) {
           </div>
         )}
 
-        {/* Input */}
-        <div style={{
-          flexShrink: 0,
-          padding: "16px 28px 22px",
-          background: C.chatBg,
-          borderTop: `1px solid ${C.chatBorder}`,
-        }}>
-          {/* Attachment preview */}
-          {attachmentFile && (
-            <div style={{
-              marginBottom: 10, padding: "10px 14px",
-              background: "#f1f5f9", border: `1px solid ${C.chatBorder}`,
-              borderRadius: 10, display: "flex", alignItems: "center", gap: 12,
-            }}>
-              {attachmentPreview ? (
-                <img src={attachmentPreview} alt="attachment" style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 6, flexShrink: 0 }} />
-              ) : (
-                <div style={{ width: 48, height: 48, borderRadius: 6, background: "#e2e8f0", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" width={22} height={22} fill={C.textMuted}>
-                    <path d="M64 480L64 96C64 60.7 92.7 32 128 32L384 32L384 160C384 177.7 398.3 192 416 192L544 192L544 480C544 515.3 515.3 544 480 544L128 544C92.7 544 64 515.3 64 480zM416 32L544 160L416 160L416 32z"/>
-                  </svg>
-                </div>
-              )}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.textPrimary, fontFamily: FONT, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{attachmentFile.name}</div>
-                <div style={{ fontSize: 12, color: C.textMuted, fontFamily: FONT }}>{(attachmentFile.size / 1024).toFixed(0)} KB · {attachmentType}</div>
-              </div>
-              <button onClick={clearAttachment} title="Remove attachment"
-                style={{ background: "none", border: "none", cursor: "pointer", color: C.textMuted, padding: 4, display: "flex", alignItems: "center" }}
-                onMouseEnter={e => (e.currentTarget.style.color = "#ef4444")}
-                onMouseLeave={e => (e.currentTarget.style.color = C.textMuted)}>
-                <svg viewBox="0 0 640 640" width={16} height={16} fill="currentColor">
-                  <path d="M342.6 250.6L512 420.1L489.4 442.7L320 273.3L150.6 442.7L128 420.1L297.4 250.6L128 81.4L150.6 58.7L320 228.1L489.4 58.7L512 81.4L342.6 250.6z"/>
-                </svg>
-              </button>
-            </div>
-          )}
-
+        {/* Input — only shown when a session is selected */}
+        {selectedSession && (
           <div style={{
-            display: "flex", gap: 10, alignItems: "flex-end",
-            background: C.inputBg, border: `1.5px solid ${C.inputBorder}`,
-            borderRadius: 16, padding: "10px 10px 10px 14px",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+            flexShrink: 0,
+            padding: "16px 28px 22px",
+            background: C.chatBg,
+            borderTop: `1px solid ${C.chatBorder}`,
           }}>
-            <textarea
-              value={userMessage}
+            {/* Attachment preview */}
+            {attachmentFile && (
+              <div style={{
+                marginBottom: 10, padding: "10px 14px",
+                background: "#f1f5f9", border: `1px solid ${C.chatBorder}`,
+                borderRadius: 10, display: "flex", alignItems: "center", gap: 12,
+              }}>
+                {attachmentPreview ? (
+                  <img src={attachmentPreview} alt="attachment" style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 6, flexShrink: 0 }} />
+                ) : (
+                  <div style={{ width: 48, height: 48, borderRadius: 6, background: "#e2e8f0", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" width={22} height={22} fill={C.textMuted}>
+                      <path d="M64 480L64 96C64 60.7 92.7 32 128 32L384 32L384 160C384 177.7 398.3 192 416 192L544 192L544 480C544 515.3 515.3 544 480 544L128 544C92.7 544 64 515.3 64 480zM416 32L544 160L416 160L416 32z"/>
+                    </svg>
+                  </div>
+                )}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: C.textPrimary, fontFamily: FONT, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{attachmentFile.name}</div>
+                  <div style={{ fontSize: 12, color: C.textMuted, fontFamily: FONT }}>{(attachmentFile.size / 1024).toFixed(0)} KB · {attachmentType}</div>
+                </div>
+                <button onClick={clearAttachment} title="Remove attachment"
+                  style={{ background: "none", border: "none", cursor: "pointer", color: C.textMuted, padding: 4, display: "flex", alignItems: "center" }}
+                  onMouseEnter={e => (e.currentTarget.style.color = "#ef4444")}
+                  onMouseLeave={e => (e.currentTarget.style.color = C.textMuted)}>
+                  <svg viewBox="0 0 640 640" width={16} height={16} fill="currentColor">
+                    <path d="M342.6 250.6L512 420.1L489.4 442.7L320 273.3L150.6 442.7L128 420.1L297.4 250.6L128 81.4L150.6 58.7L320 228.1L489.4 58.7L512 81.4L342.6 250.6z"/>
+                  </svg>
+                </button>
+              </div>
+            )}
+
+            <div style={{
+              display: "flex", gap: 10, alignItems: "flex-end",
+              background: C.inputBg, border: `1.5px solid ${C.inputBorder}`,
+              borderRadius: 16, padding: "10px 10px 10px 14px",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+            }}>
+              <textarea
+                value={userMessage}
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addMessage() } }}
-                placeholder={selectedSession ? "Type a message… (Enter to send, Shift+Enter for newline)" : "Select a session to begin"}
+                placeholder="Type a message… (Enter to send, Shift+Enter for newline)"
                 rows={1}
-                disabled={!selectedSession}
                 style={{
                   flex: 1, border: "none", outline: "none", resize: "none",
                   minHeight: 48, maxHeight: 400, height: "auto", overflowY: "auto",
@@ -1019,61 +1096,60 @@ function AiPanel({ supabase }: { supabase: any }) {
                   e.target.style.height = "auto"
                   e.target.style.height = Math.min(e.target.scrollHeight, 400) + "px"
                 }}
-            />
-            {/* Hidden file input */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*,application/pdf"
-              style={{ display: "none" }}
-              onChange={handleFileSelect}
-            />
-            {/* Attach */}
-            <button onClick={() => fileInputRef.current?.click()} title="Attach image or PDF" disabled={!selectedSession}
-              style={{
-                flexShrink: 0, width: 48, height: 48, borderRadius: 10,
-                background: attachmentFile ? C.accent + "15" : "transparent",
-                border: `1.5px solid ${attachmentFile ? C.accent : C.inputBorder}`,
-                cursor: selectedSession ? "pointer" : "not-allowed",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                color: attachmentFile ? C.accent : C.textMuted,
-              }}>
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" width={22} height={22} fill="currentColor">
-                <path d="M364.5 502.1L152.4 293.6C112.5 254.3 112.5 190.5 152.4 151.2C192.2 111.9 256.9 111.9 296.7 151.2L508.9 359.7C534.6 385 534.6 426.2 508.9 451.5C483.2 476.8 441.4 476.8 415.6 451.5L215.7 254.9C204.1 243.5 204.1 225 215.7 213.6C227.3 202.2 246.2 202.2 257.8 213.6L447.1 399.8L480 367.3L290.7 181.1C262.4 153.2 216.4 153.2 188.1 181.1C159.8 209 159.8 254.5 188.1 282.4L388 479C430.4 520.9 499.3 520.9 541.7 479C584.1 437.1 584.1 369.1 541.7 327.2L329.5 118.7L296.6 151.2L508.8 359.7"/>
-              </svg>
-            </button>
-            {/* Mic */}
-            <button onClick={toggleListening} title={listening ? "Stop" : "Voice input"}
-              style={{
-                flexShrink: 0, width: 48, height: 48, borderRadius: 10,
-                background: listening ? "#fef2f2" : "transparent",
-                border: `1.5px solid ${listening ? "#ef4444" : C.inputBorder}`,
-                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                color: listening ? "#ef4444" : C.textMuted,
-                animation: listening ? "ai-mic-pulse 1.2s ease-in-out infinite" : "none",
-              }}>
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" width={26} height={26} fill="currentColor">
-                <path d="M320 64C267 64 224 107 224 160L224 288C224 341 267 384 320 384C373 384 416 341 416 288L416 160C416 107 373 64 320 64zM176 248C176 234.7 165.3 224 152 224C138.7 224 128 234.7 128 248L128 288C128 385.9 201.3 466.7 296 478.5L296 528L248 528C234.7 528 224 538.7 224 552C224 565.3 234.7 576 248 576L392 576C405.3 576 416 565.3 416 552C416 538.7 405.3 528 392 528L344 528L344 478.5C438.7 466.7 512 385.9 512 288L512 248C512 234.7 501.3 224 488 224C474.7 224 464 234.7 464 248L464 288C464 367.5 399.5 432 320 432C240.5 432 176 367.5 176 288L176 248z"/>
-              </svg>
-            </button>
-            {/* Send */}
-            <button onClick={addMessage} disabled={anyRunning || (!userMessage.trim() && !attachmentFile) || !selectedSession}
-              style={{
-                flexShrink: 0, width: 48, height: 48, borderRadius: 10,
-                background: (userMessage.trim() || attachmentFile) && selectedSession && !anyRunning ? C.accent : "#e2e8f0",
-                border: "none", cursor: (userMessage.trim() || attachmentFile) && !anyRunning ? "pointer" : "not-allowed",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                color: (userMessage.trim() || attachmentFile) && selectedSession && !anyRunning ? "#fff" : "#94a3b8",
-                transition: "background 0.15s",
-              }}>
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" width={26} height={26} fill="currentColor">
-                <path d="M568.4 37.7C578.2 34.2 589 36.7 596.4 44C603.8 51.3 606.2 62.2 602.7 72L424.7 568.9C419.7 582.8 406.6 592 391.9 592C377.7 592 364.9 583.4 359.6 570.3L295.4 412.3C290.9 401.3 292.9 388.7 300.6 379.7L395.1 267.3C400.2 261.2 399.8 252.3 394.2 246.7C388.6 241.1 379.6 240.7 373.6 245.8L261.2 340.1C252.1 347.7 239.6 349.7 228.6 345.3L70.1 280.8C57 275.5 48.4 262.7 48.4 248.5C48.4 233.8 57.6 220.7 71.5 215.7L568.4 37.7z"/>
-              </svg>
-            </button>
-          </div>
+              />
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,application/pdf"
+                style={{ display: "none" }}
+                onChange={handleFileSelect}
+              />
+              {/* Attach */}
+              <button onClick={() => fileInputRef.current?.click()} title="Attach image or PDF"
+                style={{
+                  flexShrink: 0, width: 48, height: 48, borderRadius: 10,
+                  background: attachmentFile ? C.accent + "15" : "transparent",
+                  border: `1.5px solid ${attachmentFile ? C.accent : C.inputBorder}`,
+                  cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: attachmentFile ? C.accent : C.textMuted,
+                }}>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" width={22} height={22} fill="currentColor">
+                  <path d="M364.5 502.1L152.4 293.6C112.5 254.3 112.5 190.5 152.4 151.2C192.2 111.9 256.9 111.9 296.7 151.2L508.9 359.7C534.6 385 534.6 426.2 508.9 451.5C483.2 476.8 441.4 476.8 415.6 451.5L215.7 254.9C204.1 243.5 204.1 225 215.7 213.6C227.3 202.2 246.2 202.2 257.8 213.6L447.1 399.8L480 367.3L290.7 181.1C262.4 153.2 216.4 153.2 188.1 181.1C159.8 209 159.8 254.5 188.1 282.4L388 479C430.4 520.9 499.3 520.9 541.7 479C584.1 437.1 584.1 369.1 541.7 327.2L329.5 118.7L296.6 151.2L508.8 359.7"/>
+                </svg>
+              </button>
+              {/* Mic */}
+              <button onClick={toggleListening} title={listening ? "Stop" : "Voice input"}
+                style={{
+                  flexShrink: 0, width: 48, height: 48, borderRadius: 10,
+                  background: listening ? "#fef2f2" : "transparent",
+                  border: `1.5px solid ${listening ? "#ef4444" : C.inputBorder}`,
+                  cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                  color: listening ? "#ef4444" : C.textMuted,
+                  animation: listening ? "ai-mic-pulse 1.2s ease-in-out infinite" : "none",
+                }}>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" width={26} height={26} fill="currentColor">
+                  <path d="M320 64C267 64 224 107 224 160L224 288C224 341 267 384 320 384C373 384 416 341 416 288L416 160C416 107 373 64 320 64zM176 248C176 234.7 165.3 224 152 224C138.7 224 128 234.7 128 248L128 288C128 385.9 201.3 466.7 296 478.5L296 528L248 528C234.7 528 224 538.7 224 552C224 565.3 234.7 576 248 576L392 576C405.3 576 416 565.3 416 552C416 538.7 405.3 528 392 528L344 528L344 478.5C438.7 466.7 512 385.9 512 288L512 248C512 234.7 501.3 224 488 224C474.7 224 464 234.7 464 248L464 288C464 367.5 399.5 432 320 432C240.5 432 176 367.5 176 288L176 248z"/>
+                </svg>
+              </button>
+              {/* Send */}
+              <button onClick={addMessage} disabled={anyRunning || (!userMessage.trim() && !attachmentFile)}
+                style={{
+                  flexShrink: 0, width: 48, height: 48, borderRadius: 10,
+                  background: (userMessage.trim() || attachmentFile) && !anyRunning ? C.accent : "#e2e8f0",
+                  border: "none", cursor: (userMessage.trim() || attachmentFile) && !anyRunning ? "pointer" : "not-allowed",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: (userMessage.trim() || attachmentFile) && !anyRunning ? "#fff" : "#94a3b8",
+                  transition: "background 0.15s",
+                }}>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" width={26} height={26} fill="currentColor">
+                  <path d="M568.4 37.7C578.2 34.2 589 36.7 596.4 44C603.8 51.3 606.2 62.2 602.7 72L424.7 568.9C419.7 582.8 406.6 592 391.9 592C377.7 592 364.9 583.4 359.6 570.3L295.4 412.3C290.9 401.3 292.9 388.7 300.6 379.7L395.1 267.3C400.2 261.2 399.8 252.3 394.2 246.7C388.6 241.1 379.6 240.7 373.6 245.8L261.2 340.1C252.1 347.7 239.6 349.7 228.6 345.3L70.1 280.8C57 275.5 48.4 262.7 48.4 248.5C48.4 233.8 57.6 220.7 71.5 215.7L568.4 37.7z"/>
+                </svg>
+              </button>
+            </div>
 
-          {/* Run buttons + bottom copy */}
-          {selectedSession && (
+            {/* Run buttons */}
             <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap", alignItems: "center" }}>
               {participants.map(pid => {
                 const p = AI_PROVIDERS.find(x => x.id === pid)
@@ -1095,7 +1171,6 @@ function AiPanel({ supabase }: { supabase: any }) {
                   </button>
                 )
               })}
-              {/* Auto Next — icon+text on desktop, icon-only on mobile */}
               <button onClick={() => runTurn()} disabled={anyRunning}
                 title="Auto Next"
                 style={{
@@ -1119,7 +1194,6 @@ function AiPanel({ supabase }: { supabase: any }) {
                     </>
                 }
               </button>
-              {/* Copy chat — bottom, always visible */}
               {messages.length > 0 && (
                 <button
                   onClick={copyAllMessages}
@@ -1143,8 +1217,8 @@ function AiPanel({ supabase }: { supabase: any }) {
                 </button>
               )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     )
   }
@@ -1153,12 +1227,9 @@ function AiPanel({ supabase }: { supabase: any }) {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        * { box-sizing: border-box; }
-
         .rdeo-sidebar {
           scrollbar-width: thin;
-          scrollbar-color: #3d2a6e transparent;
+          scrollbar-color: #7c3aed #0b0916;
         }
         .rdeo-sidebar::-webkit-scrollbar { width: 6px; }
         .rdeo-sidebar::-webkit-scrollbar-track { background: #0b0916; border-radius: 3px; }
@@ -1195,7 +1266,6 @@ function AiPanel({ supabase }: { supabase: any }) {
 
       {/* DESKTOP */}
       <div className="rdeo-desktop" style={{ position: "relative" }}>
-        {/* Backdrop — dismisses new session form on click */}
         {showNewForm && (
           <div
             onClick={closeNewForm}
@@ -1205,7 +1275,6 @@ function AiPanel({ supabase }: { supabase: any }) {
             }}
           />
         )}
-        {/* Sidebar */}
         {sidebarOpen && (
           <div style={{ width: showNewForm ? Math.max(380, sidebarWidth) : sidebarWidth, background: C.sidebarBg, display: "flex", flexDirection: "column", flexShrink: 0, overflow: "hidden", position: "relative", zIndex: 5 }}>
             {renderSidebarHeader()}
@@ -1215,7 +1284,6 @@ function AiPanel({ supabase }: { supabase: any }) {
           </div>
         )}
 
-        {/* Drag handle + toggle */}
         <div style={{ width: 16, flexShrink: 0, display: "flex", alignItems: "stretch", position: "relative", zIndex: 5 }}>
           {sidebarOpen && (
             <div
@@ -1257,7 +1325,6 @@ function AiPanel({ supabase }: { supabase: any }) {
           </button>
         </div>
 
-        {/* Chat area */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, overflow: "hidden" }}>
           {renderChatHeader()}
           <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden" }}>
@@ -1265,7 +1332,6 @@ function AiPanel({ supabase }: { supabase: any }) {
           </div>
         </div>
       </div>
-      {/* END DESKTOP */}
 
       {/* MOBILE */}
       <div className="rdeo-mobile">

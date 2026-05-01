@@ -118,6 +118,10 @@ function SpurSelect({ value, onChange, options, placeholder, disabled, theme }: 
   )
 }
 
+function countWords(html: string): number {
+  return html.replace(/<[^>]+>/g, " ").trim().split(/\s+/).filter(Boolean).length
+}
+
 export function SpurPostEditor({
   post,
   siteId,
@@ -125,6 +129,9 @@ export function SpurPostEditor({
   supabase,
   onSaved,
   onCancel,
+  onNavigate,
+  serialPosts,
+  onReorder,
   theme,
   darkMode,
   canDraft,
@@ -137,6 +144,9 @@ export function SpurPostEditor({
   supabase: any
   onSaved: (post: SpurPost) => void
   onCancel: () => void
+  onNavigate?: (post: SpurPost) => void
+  serialPosts?: SpurPost[]
+  onReorder?: (posts: SpurPost[]) => void
   theme: SpurTheme
   darkMode: boolean
   canDraft: boolean
@@ -156,6 +166,10 @@ export function SpurPostEditor({
   const [error, setError] = useState<string | null>(null)
   const thumbInputRef = useRef<HTMLInputElement>(null)
   const existingPost = (post ?? null) as any
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const autoSavedPostId = useRef<string | null>(post?.id ?? null)
+  const [autoSaving, setAutoSaving] = useState(false)
+  const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [discoveryEnabled, setDiscoveryEnabled] = useState<boolean>(!!existingPost?.is_in_discovery)
   const [discoveryChannelId, setDiscoveryChannelId] = useState<string>("")
   const [discoveryCategoryId, setDiscoveryCategoryId] = useState<string>(existingPost?.discovery_category_id ?? "")
@@ -165,6 +179,15 @@ export function SpurPostEditor({
   const [serials, setSerials] = useState<SpurSerial[]>([])
   const [isSerial, setIsSerial] = useState<boolean>(!!existingPost?.is_serial)
   const [serialId, setSerialId] = useState<string>(existingPost?.serial_id ?? "")
+  const [wordCount, setWordCount] = useState(0)
+  const [orderedChapters, setOrderedChapters] = useState<SpurPost[]>(() =>
+    (serialPosts ?? []).slice().sort((a, b) => (a.serial_index ?? 0) - (b.serial_index ?? 0))
+  )
+  const [reordering, setReordering] = useState(false)
+  const [railVisible, setRailVisible] = useState(true)
+  const dragIndex = useRef<number | null>(null)
+  const dragOverIndex = useRef<number | null>(null)
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
 
   const [serialModalOpen, setSerialModalOpen] = useState(false)
   const [serialModalTitle, setSerialModalTitle] = useState("")
@@ -218,6 +241,94 @@ export function SpurPostEditor({
     ],
     content: post?.content ?? "",
   })
+
+  useEffect(() => {
+    setOrderedChapters((serialPosts ?? []).slice().sort((a, b) => (a.serial_index ?? 0) - (b.serial_index ?? 0)))
+  }, [serialPosts])
+
+  async function handleAutoSave() {
+    if (!title.trim() || !canDraft) return
+    setAutoSaving(true)
+    try {
+      const content = editor?.getHTML() ?? ""
+      const nextSlug = slug.trim() || slugify(title)
+      const payload = {
+        site_id: siteId,
+        author_id: userId,
+        title: title.trim(),
+        slug: nextSlug,
+        excerpt: excerpt.trim() || null,
+        content,
+        status: "draft" as const,
+        tags,
+        thumbnail_url: thumbnailUrl,
+        category_id: categoryId || null,
+        is_serial: isSerial,
+        serial_id: isSerial ? serialId : null,
+        updated_at: new Date().toISOString(),
+      }
+      if (autoSavedPostId.current) {
+        await supabase.from("spur_posts").update(payload).eq("id", autoSavedPostId.current)
+      } else {
+        const { data, error: e } = await supabase.from("spur_posts").insert(payload).select().single()
+        if (!e && data) autoSavedPostId.current = data.id
+      }
+      setLastSaved(new Date())
+    } catch {
+      // silent
+    } finally {
+      setAutoSaving(false)
+    }
+  }
+
+  function scheduleAutoSave() {
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
+    autoSaveTimer.current = setTimeout(handleAutoSave, 3000)
+  }
+
+  useEffect(() => {
+    if (!editor) return
+    editor.on("update", scheduleAutoSave)
+    return () => { editor.off("update", scheduleAutoSave) }
+  }, [editor])
+
+  useEffect(() => {
+    if (!editor) return
+    const updateCount = () => setWordCount(countWords(editor.getHTML()))
+    updateCount()
+    editor.on("update", updateCount)
+    return () => { editor.off("update", updateCount) }
+  }, [editor])
+
+  useEffect(() => {
+    scheduleAutoSave()
+    return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current) }
+  }, [title, slug, excerpt, tags])
+
+  async function handleDrop() {
+    const from = dragIndex.current
+    const to = dragOverIndex.current
+    dragIndex.current = null
+    dragOverIndex.current = null
+    setDragOverIdx(null)
+    if (from === null || to === null || from === to) return
+    const next = orderedChapters.slice()
+    const [moved] = next.splice(from, 1)
+    next.splice(to, 0, moved)
+    const updated = next.map((p, i) => ({ ...p, serial_index: i }))
+    setOrderedChapters(updated)
+    setReordering(true)
+    try {
+      await Promise.all(
+        updated.map(p => supabase.from("spur_posts").update({ serial_index: p.serial_index }).eq("id", p.id))
+      )
+      onReorder?.(updated)
+    } catch {
+      // silent
+    } finally {
+      setReordering(false)
+    }
+  }
 
   async function handleSerialCoverUpload(file: File) {
     setSerialModalCoverUploading(true)
@@ -332,6 +443,29 @@ export function SpurPostEditor({
     finally { setThumbUploading(false) }
   }
 
+  function handlePrint() {
+    const win = window.open("", "_blank")
+    if (!win) return
+    win.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>${title || "Draft"}</title>
+  <style>
+    body { line-height: 3; margin: 1in; }
+  </style>
+</head>
+<body>
+  <h1>${title || "Untitled"}</h1>
+  ${editor?.getHTML() ?? ""}
+</body>
+</html>`)
+    win.document.close()
+    win.focus()
+    win.onafterprint = () => win.close()
+    win.print()
+  }
+
   async function handleSave() {
     if (!title.trim()) { setError("Title is required."); return }
     if (!canDraft) {
@@ -353,6 +487,8 @@ export function SpurPostEditor({
     if (discoveryEnabled && !discoveryCategoryId) { setError("Choose a channel category."); return }
 
     setSaving(true); setError(null)
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
     try {
       const content = editor?.getHTML() ?? ""
       const nextSlug = slug.trim() || slugify(title)
@@ -422,6 +558,8 @@ export function SpurPostEditor({
       }
 
       onSaved(saved)
+      autoSavedPostId.current = saved.id
+      setLastSaved(new Date())
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -446,8 +584,11 @@ export function SpurPostEditor({
 
   const TSep = () => <div style={{ width: 1, height: 18, background: canvasBorder, flexShrink: 0, alignSelf: "center", margin: "0 1px" }} />
 
+  const showChapterRail = !!(isSerial && serialId && serialPosts && serialPosts.length > 0 && onNavigate)
+  const serialTotalWords = serialPosts ? serialPosts.reduce((acc, p) => acc + countWords(p.content ?? ""), 0) : 0
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: theme.bg, fontFamily: SPURF }}>
+    <div style={{ display: "flex", height: "100%", background: theme.bg, fontFamily: SPURF }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=Lora:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Geist+Mono:wght@400;500&display=swap');
         .spur-editor .ProseMirror { outline: none; min-height: 520px; font-family: "Lora", Georgia, serif; font-size: 19px; line-height: 1.9; color: ${theme.text}; caret-color: ${theme.accent}; }
@@ -471,7 +612,64 @@ export function SpurPostEditor({
         .spur-editor .ProseMirror em { font-style: italic; }
         .spur-editor .ProseMirror p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: ${theme.dim}; pointer-events: none; float: left; height: 0; font-style: italic; font-family: "Lora", Georgia, serif; }
         .spur-select-dropdown::-webkit-scrollbar { display: none; }
+        .spur-chapter-rail::-webkit-scrollbar { display: none; }
       `}</style>
+
+      {/* Chapter rail */}
+      {showChapterRail && railVisible && (
+        <div className="spur-chapter-rail" style={{ width: 320, flexShrink: 0, borderRight: `1px solid ${theme.border}`, background: theme.surface, display: "flex", flexDirection: "column", overflowY: "auto", scrollbarWidth: "none" }}>
+          <div style={{ padding: "20px 20px 12px", borderBottom: `1px solid ${theme.borderLight}` }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: theme.text, fontFamily: SPURF, marginBottom: 4 }}>
+              {serials.find(s => s.id === serialId)?.title ?? "Serial"}
+            </div>
+            <div style={{ fontSize: 14, color: theme.muted, fontFamily: SPURF }}>
+              {reordering ? "Saving order…" : `${serialTotalWords.toLocaleString()} words total`}
+            </div>
+          </div>
+          <div style={{ flex: 1, padding: "6px 0" }}>
+            {orderedChapters.map((p, i) => {
+              const isActive = p.id === post?.id
+              const wc = countWords(p.content ?? "")
+              const isDragOver = dragOverIdx === i
+              return (
+                <div
+                  key={p.id}
+                  draggable
+                  onDragStart={() => { dragIndex.current = i }}
+                  onDragOver={e => { e.preventDefault(); dragOverIndex.current = i; setDragOverIdx(i) }}
+                  onDragEnd={() => { dragIndex.current = null; dragOverIndex.current = null; setDragOverIdx(null) }}
+                  onDrop={handleDrop}
+                  style={{ borderTop: isDragOver ? `2px solid ${theme.accent}` : "2px solid transparent", transition: "border-color 0.1s" }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => !isActive && onNavigate!(p)}
+                    style={{
+                      display: "block", width: "100%", textAlign: "left", padding: "12px 20px",
+                      background: isActive ? theme.accentDim : "transparent",
+                      border: "none", borderLeft: `3px solid ${isActive ? theme.accent : "transparent"}`,
+                      cursor: isActive ? "default" : "grab",
+                      transition: "background 0.1s",
+                    }}
+                    onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = theme.borderLight }}
+                    onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = "transparent" }}
+                  >
+                    <div style={{ fontSize: 15, fontWeight: isActive ? 600 : 400, color: isActive ? theme.accent : theme.text, fontFamily: SPURF, lineHeight: 1.4, marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "flex", alignItems: "baseline" }}>
+                      <span style={{ color: theme.muted, marginRight: 10, flexShrink: 0 }}>{i + 1}</span>{p.title || "Untitled"}
+                    </div>
+                    <div style={{ fontSize: 13, color: theme.muted, fontFamily: SPURF }}>
+                      {wc.toLocaleString()} words
+                    </div>
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Main editor column */}
+      <div style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0 }}>
 
       {/* Top chrome */}
       {/* Top chrome */}
@@ -487,7 +685,29 @@ export function SpurPostEditor({
           borderBottom: `1px solid ${theme.border}`,
         }}
       >
+        {showChapterRail && (
+          <button type="button" onClick={() => setRailVisible(v => !v)} title={railVisible ? "Hide chapters" : "Show chapters"}
+            style={{ background: "none", border: "none", cursor: "pointer", color: theme.dim, padding: "4px 6px", display: "flex", alignItems: "center", gap: 6, flexShrink: 0, fontSize: 11, fontFamily: SPURM, transition: "color 0.1s" }}
+            onMouseEnter={e => e.currentTarget.style.color = theme.text}
+            onMouseLeave={e => e.currentTarget.style.color = theme.dim}>
+            <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              {railVisible ? <polyline points="15 18 9 12 15 6" /> : <polyline points="9 18 15 12 9 6" />}
+            </svg>
+            {railVisible ? "Hide" : "Chapters"}
+          </button>
+        )}
         <div style={{ flex: 1 }} />
+
+        <div style={{ fontSize: 11, color: theme.dim, fontFamily: SPURF, minWidth: 80, textAlign: "right", flexShrink: 0 }}>
+          {autoSaving ? "Saving…" : lastSaved ? `Saved ${lastSaved.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : null}
+        </div>
+
+        <button type="button" onClick={handlePrint} title="Print draft"
+          style={{ background: "none", border: `1px solid ${theme.border}`, borderRadius: 7, cursor: "pointer", color: theme.muted, padding: "5px 8px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "color 0.1s, border-color 0.1s" }}
+          onMouseEnter={e => { e.currentTarget.style.color = theme.text; e.currentTarget.style.borderColor = theme.muted }}
+          onMouseLeave={e => { e.currentTarget.style.color = theme.muted; e.currentTarget.style.borderColor = theme.border }}>
+          <svg viewBox="0 0 640 640" width={15} height={15} fill="currentColor"><path d="M128 0L128 128L64 128C28.7 128 0 156.7 0 192L0 448C0 483.3 28.7 512 64 512L128 512L128 576C128 611.3 156.7 640 192 640L448 640C483.3 640 512 611.3 512 576L512 512L576 512C611.3 512 640 483.3 640 448L640 192C640 156.7 611.3 128 576 128L512 128L512 0L128 0zM176 48L464 48L464 128L176 128L176 48zM176 512L464 512L464 592L176 592L176 512zM112 224C129.7 224 144 238.3 144 256C144 273.7 129.7 288 112 288C94.3 288 80 273.7 80 256C80 238.3 94.3 224 112 224z"/></svg>
+        </button>
 
         {(["draft", "published", "scheduled"] as const).map(s => {
           const cfg = stCfg[s]
@@ -893,8 +1113,19 @@ export function SpurPostEditor({
             <div className="spur-editor" style={{ padding: "36px 52px 72px" }}>
               <EditorContent editor={editor} />
             </div>
+            <div style={{ padding: "10px 52px 14px", borderTop: `1px solid ${canvasBorder}`, display: "flex", alignItems: "center", gap: 16 }}>
+              <span style={{ fontSize: 11, color: theme.dim, fontFamily: SPURM }}>
+                {wordCount.toLocaleString()} words
+              </span>
+              {showChapterRail && (
+                <span style={{ fontSize: 11, color: theme.dim, fontFamily: SPURM }}>
+                  · {serialTotalWords.toLocaleString()} total in serial
+                </span>
+              )}
+            </div>
           </div>
         </div>
+      </div>
       </div>
     </div>
   )

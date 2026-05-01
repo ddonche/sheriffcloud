@@ -10,25 +10,7 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 )
 
-const freeEntitlements = {
-  site_limit: 3,
-  custom_domain_access: false,
-  sites_storage_limit_mb: 500,
-  holster_storage_limit_mb: 0,
-  media_storage_limit_mb: 0,
-  creator_bundle_access: false,
-  studio_access: false,
-}
-
-const coreEntitlements = {
-  site_limit: 5,
-  custom_domain_access: true,
-  sites_storage_limit_mb: 500,
-  holster_storage_limit_mb: 0,
-  media_storage_limit_mb: 0,
-  creator_bundle_access: false,
-  studio_access: false,
-}
+// ── Sheriff Cloud plan fulfillment ────────────────────────────────────────────
 
 async function applyPlan(userId: string, basePlan: "free" | "core", status: string) {
   const isCore = basePlan === "core"
@@ -55,17 +37,13 @@ async function applyPlan(userId: string, basePlan: "free" | "core", status: stri
     .upsert(
       {
         user_id: userId,
-
-        // FORCE correct values
         site_limit: isCore ? 5 : 3,
         custom_domain_access: isCore ? true : false,
-
         sites_storage_limit_mb: 500,
         holster_storage_limit_mb: 0,
         media_storage_limit_mb: 0,
         creator_bundle_access: false,
         studio_access: false,
-
         updated_at: new Date().toISOString(),
       },
       { onConflict: "user_id" }
@@ -79,6 +57,60 @@ async function applyPlan(userId: string, basePlan: "free" | "core", status: stri
   console.log("Applied plan:", { userId, basePlan })
 }
 
+// ── Chatterbox credit fulfillment ─────────────────────────────────────────────
+
+async function fulfillCreditPurchase(session: Stripe.Checkout.Session) {
+  const userId     = session.metadata?.user_id
+  const credits    = parseInt(session.metadata?.credits ?? "0", 10)
+  const checkoutId = session.id
+
+  if (!userId || !credits) {
+    console.error("fulfillCreditPurchase: missing metadata", session.metadata)
+    return
+  }
+
+  // Idempotency check — don't double-fulfill
+  const { data: order } = await supabase
+    .from("chatterbox_stripe_orders")
+    .select("id, status, credits_to_grant")
+    .eq("stripe_checkout_id", checkoutId)
+    .single()
+
+  if (order?.status === "complete") {
+    console.log("Credits already fulfilled for checkout:", checkoutId)
+    return
+  }
+
+  const { error: creditError } = await supabase.rpc("chatterbox_add_credits", {
+    p_user_id:         userId,
+    p_amount:          order?.credits_to_grant ?? credits,
+    p_reason:          "pack_purchase",
+    p_stripe_order_id: order?.id ?? null,
+  })
+
+  if (creditError) {
+    console.error("chatterbox_add_credits error:", creditError)
+    throw creditError
+  }
+
+  if (order?.id) {
+    const { error: updateError } = await supabase
+      .from("chatterbox_stripe_orders")
+      .update({
+        status:                "complete",
+        stripe_payment_intent: session.payment_intent as string ?? null,
+        fulfilled_at:          new Date().toISOString(),
+      })
+      .eq("id", order.id)
+
+    if (updateError) console.error("Order update error:", updateError)
+  }
+
+  console.log(`Chatterbox credits fulfilled: ${order?.credits_to_grant ?? credits} → user ${userId}`)
+}
+
+// ── Webhook handler ───────────────────────────────────────────────────────────
+
 Deno.serve(async (req) => {
   try {
     const signature = req.headers.get("stripe-signature")
@@ -86,16 +118,24 @@ Deno.serve(async (req) => {
       return new Response("Missing stripe-signature header", { status: 400 })
     }
 
-    const body = await req.text()
+    const body          = await req.text()
     const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET")!
-    const event = await stripe.webhooks.constructEventAsync(body, signature, webhookSecret)
+    const event         = await stripe.webhooks.constructEventAsync(body, signature, webhookSecret)
 
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as Stripe.Checkout.Session
-      const userId = session.metadata?.user_id
+      const userId  = session.metadata?.user_id
 
-      if (userId) {
+      if (!userId) {
+        console.error("checkout.session.completed: no user_id in metadata")
+      } else if (session.metadata?.credits) {
+        // Chatterbox credit pack purchase
+        await fulfillCreditPurchase(session)
+      } else if (session.metadata?.base_plan) {
+        // Sheriff Cloud subscription checkout
         await applyPlan(userId, "core", "active")
+      } else {
+        console.warn("checkout.session.completed: unrecognized metadata", session.metadata)
       }
     }
 
@@ -105,10 +145,7 @@ Deno.serve(async (req) => {
     ) {
       const subscription = event.data.object as Stripe.Subscription
       const userId = subscription.metadata?.user_id
-
       if (userId) {
-        // For launch: if the subscription still exists, keep them on Core.
-        // Do NOT downgrade just because the status isn't literally "active" yet.
         await applyPlan(userId, "core", subscription.status)
       }
     }
@@ -116,7 +153,6 @@ Deno.serve(async (req) => {
     if (event.type === "customer.subscription.deleted") {
       const subscription = event.data.object as Stripe.Subscription
       const userId = subscription.metadata?.user_id
-
       if (userId) {
         await applyPlan(userId, "free", "active")
       }
@@ -129,13 +165,8 @@ Deno.serve(async (req) => {
   } catch (err: any) {
     console.error("stripe_webhook failed", err)
     return new Response(
-      JSON.stringify({
-        error: err?.message ?? String(err),
-      }),
-      {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      }
+      JSON.stringify({ error: err?.message ?? String(err) }),
+      { status: 400, headers: { "Content-Type": "application/json" } }
     )
   }
 })

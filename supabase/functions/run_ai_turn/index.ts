@@ -22,6 +22,37 @@ type MessageRow = {
   content: string
 }
 
+type ProviderResult = {
+  text: string
+  inputTokens: number
+  outputTokens: number
+}
+
+// ── Pricing (per 1M tokens, USD) ─────────────────────────────────────────────
+const PRICING: Record<string, { input: number; output: number }> = {
+  openai:  { input: 2.50,  output: 10.00 },  // gpt-4o
+  gemini:  { input: 0.15,  output: 0.60  },  // gemini-2.5-flash
+  claude:  { input: 3.00,  output: 15.00 },  // claude-sonnet-4-6
+  grok:    { input: 2.00,  output: 10.00 },  // grok-3-latest
+}
+
+const MARKUP         = 2.5    // 2.5× markup
+const CREDIT_VALUE   = 0.01   // 1 credit = $0.01
+const FREE_TIER_LIMIT = 10    // free responses per day
+const MIN_CREDITS    = 5      // minimum balance required to run a turn
+
+function calcCredits(provider: string, inputTokens: number, outputTokens: number): {
+  rawCostUsd: number
+  finalCostUsd: number
+  creditsCharged: number
+} {
+  const pricing = PRICING[provider] ?? { input: 3.00, output: 15.00 }
+  const rawCostUsd = (inputTokens / 1_000_000 * pricing.input) + (outputTokens / 1_000_000 * pricing.output)
+  const finalCostUsd = rawCostUsd * MARKUP
+  const creditsCharged = Math.ceil(finalCostUsd / CREDIT_VALUE)
+  return { rawCostUsd, finalCostUsd, creditsCharged }
+}
+
 function providerFromSpeaker(speaker: Speaker): string {
   if (speaker === "chatgpt") return "openai"
   return speaker
@@ -101,20 +132,13 @@ function buildSystemPrompt(identity: Speaker, participants: Speaker[], mode: Mod
 
 // ── Provider callers ─────────────────────────────────────────────────────────
 
-async function callOpenAI(apiKey: string, identity: Speaker, transcript: MessageRow[]): Promise<string> {
+async function callOpenAI(apiKey: string, identity: Speaker, transcript: MessageRow[]): Promise<ProviderResult> {
   const model = Deno.env.get("OPENAI_MODEL") || "gpt-4o"
 
   const messages = transcript.map(m => {
-    if (m.role === "system") {
-      return { role: "system" as const, content: m.content }
-    }
-    if (m.role === "user") {
-      return { role: "user" as const, content: m.content }
-    }
-    return {
-      role: "assistant" as const,
-      content: `${speakerLabel(m.role as Speaker)}: ${m.content}`,
-    }
+    if (m.role === "system") return { role: "system" as const, content: m.content }
+    if (m.role === "user")   return { role: "user" as const, content: m.content }
+    return { role: "assistant" as const, content: `${speakerLabel(m.role as Speaker)}: ${m.content}` }
   })
 
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -127,10 +151,14 @@ async function callOpenAI(apiKey: string, identity: Speaker, transcript: Message
   if (!res.ok) throw new Error(data?.error?.message ?? "OpenAI request failed")
   const text = data?.choices?.[0]?.message?.content
   if (!text) throw new Error("OpenAI returned no content")
-  return text.replace(new RegExp(`^${speakerLabel(identity)}:\\s*`, "i"), "").trim()
+  return {
+    text: text.replace(new RegExp(`^${speakerLabel(identity)}:\\s*`, "i"), "").trim(),
+    inputTokens:  data?.usage?.prompt_tokens     ?? 0,
+    outputTokens: data?.usage?.completion_tokens ?? 0,
+  }
 }
 
-async function callGemini(apiKey: string, identity: Speaker, transcript: MessageRow[]): Promise<string> {
+async function callGemini(apiKey: string, identity: Speaker, transcript: MessageRow[]): Promise<ProviderResult> {
   const model = Deno.env.get("GEMINI_MODEL") || "gemini-2.5-flash"
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`
   const systemText = transcript.find(m => m.role === "system")?.content ?? ""
@@ -142,7 +170,6 @@ async function callGemini(apiKey: string, identity: Speaker, transcript: Message
       parts: [{ text: m.role === "user" ? m.content : `${speakerLabel(m.role as Speaker)}: ${m.content}` }],
     }))
 
-  // Merge consecutive same-role messages
   const contents: { role: string; parts: { text: string }[] }[] = []
   for (const msg of rawContents) {
     const last = contents[contents.length - 1]
@@ -156,7 +183,6 @@ async function callGemini(apiKey: string, identity: Speaker, transcript: Message
   if (contents.length > 0 && contents[0].role !== "user") {
     contents.unshift({ role: "user", parts: [{ text: "(conversation start)" }] })
   }
-
   if (contents.length > 0 && contents[contents.length - 1].role === "model") {
     contents.push({ role: "user", parts: [{ text: "(please continue)" }] })
   }
@@ -187,10 +213,15 @@ async function callGemini(apiKey: string, identity: Speaker, transcript: Message
 
   const text = candidate?.content?.parts?.map((p: { text?: string }) => p.text ?? "").join("").trim()
   if (!text) throw new Error(`Gemini returned empty content — candidate: ${JSON.stringify(candidate).slice(0, 300)}`)
-  return text.replace(new RegExp(`^${speakerLabel(identity)}:\\s*`, "i"), "").trim()
+
+  return {
+    text: text.replace(new RegExp(`^${speakerLabel(identity)}:\\s*`, "i"), "").trim(),
+    inputTokens:  data?.usageMetadata?.promptTokenCount     ?? 0,
+    outputTokens: data?.usageMetadata?.candidatesTokenCount ?? 0,
+  }
 }
 
-async function callClaude(apiKey: string, identity: Speaker, transcript: MessageRow[]): Promise<string> {
+async function callClaude(apiKey: string, identity: Speaker, transcript: MessageRow[]): Promise<ProviderResult> {
   const model = Deno.env.get("CLAUDE_MODEL") || "claude-sonnet-4-6"
   const systemText = transcript.find(m => m.role === "system")?.content ?? ""
 
@@ -201,7 +232,6 @@ async function callClaude(apiKey: string, identity: Speaker, transcript: Message
       content: m.role === "user" ? m.content : `${speakerLabel(m.role as Speaker)}: ${m.content}`,
     }))
 
-  // Merge consecutive same-role messages
   const messages: { role: "user" | "assistant"; content: string }[] = []
   for (const msg of rawMessages) {
     const last = messages[messages.length - 1]
@@ -230,23 +260,20 @@ async function callClaude(apiKey: string, identity: Speaker, transcript: Message
   if (!res.ok) throw new Error(data?.error?.message ?? `Claude request failed — last role: ${messages[messages.length - 1].role}, count: ${messages.length}`)
   const text = data?.content?.[0]?.text
   if (!text) throw new Error("Claude returned no content")
-  return text.replace(new RegExp(`^${speakerLabel(identity)}:\\s*`, "i"), "").trim()
+  return {
+    text: text.replace(new RegExp(`^${speakerLabel(identity)}:\\s*`, "i"), "").trim(),
+    inputTokens:  data?.usage?.input_tokens  ?? 0,
+    outputTokens: data?.usage?.output_tokens ?? 0,
+  }
 }
 
-async function callGrok(apiKey: string, identity: Speaker, transcript: MessageRow[]): Promise<string> {
+async function callGrok(apiKey: string, identity: Speaker, transcript: MessageRow[]): Promise<ProviderResult> {
   const model = Deno.env.get("GROK_MODEL") || "grok-3-latest"
 
   const messages = transcript.map(m => {
-    if (m.role === "system") {
-      return { role: "system" as const, content: m.content }
-    }
-    if (m.role === "user") {
-      return { role: "user" as const, content: m.content }
-    }
-    return {
-      role: "assistant" as const,
-      content: `${speakerLabel(m.role as Speaker)}: ${m.content}`,
-    }
+    if (m.role === "system") return { role: "system" as const, content: m.content }
+    if (m.role === "user")   return { role: "user" as const, content: m.content }
+    return { role: "assistant" as const, content: `${speakerLabel(m.role as Speaker)}: ${m.content}` }
   })
 
   const res = await fetch("https://api.x.ai/v1/chat/completions", {
@@ -259,10 +286,14 @@ async function callGrok(apiKey: string, identity: Speaker, transcript: MessageRo
   if (!res.ok) throw new Error(data?.error?.message ?? "Grok request failed")
   const text = data?.choices?.[0]?.message?.content
   if (!text) throw new Error("Grok returned no content")
-  return text.replace(new RegExp(`^${speakerLabel(identity)}:\\s*`, "i"), "").trim()
+  return {
+    text: text.replace(new RegExp(`^${speakerLabel(identity)}:\\s*`, "i"), "").trim(),
+    inputTokens:  data?.usage?.prompt_tokens     ?? 0,
+    outputTokens: data?.usage?.completion_tokens ?? 0,
+  }
 }
 
-async function callProvider(provider: string, apiKey: string, identity: Speaker, transcript: MessageRow[]): Promise<string> {
+async function callProvider(provider: string, apiKey: string, identity: Speaker, transcript: MessageRow[]): Promise<ProviderResult> {
   if (provider === "openai") return callOpenAI(apiKey, identity, transcript)
   if (provider === "gemini") return callGemini(apiKey, identity, transcript)
   if (provider === "claude") return callClaude(apiKey, identity, transcript)
@@ -312,10 +343,9 @@ serve(async (req) => {
     .single()
 
   if (profileError || !profile) return json(403, { ok: false, error: "Profile not found" })
-  if (profile.is_suspended) return json(403, { ok: false, error: "Account suspended" })
-  if (!profile.has_ai_access) return json(403, { ok: false, error: "AI access denied" })
+  if (profile.is_suspended)     return json(403, { ok: false, error: "Account suspended" })
+  if (!profile.has_ai_access)   return json(403, { ok: false, error: "AI access denied" })
 
-  // Fetch user settings (master prompt) — null row is fine, just means no settings yet
   const { data: accountSettings } = await supabase
     .from("account_settings")
     .select("master_prompt")
@@ -339,14 +369,11 @@ serve(async (req) => {
   if (sessionError || !session) return json(404, { ok: false, error: "Session not found" })
   if (session.status === "ended") return json(400, { ok: false, error: "Session already ended" })
 
-  // Participants — fall back to legacy 2-party if not stored
   const participants: Speaker[] = Array.isArray(session.participants) && session.participants.length > 0
     ? session.participants as Speaker[]
     : [session.first_speaker as Speaker, session.first_speaker === "chatgpt" ? "gemini" : "chatgpt"]
 
   const mode: Mode = (session.mode as Mode) || "balanced"
-
-  // Speaker: explicit client override > session next_speaker > first participant
   const currentSpeaker: Speaker = (body.model as Speaker) ?? (session.next_speaker as Speaker) ?? participants[0]
 
   if (!participants.includes(currentSpeaker)) {
@@ -356,7 +383,9 @@ serve(async (req) => {
   const provider = providerFromSpeaker(currentSpeaker)
   console.log("speaker:", currentSpeaker, "provider:", provider, "mode:", mode, "participants:", participants)
 
-  const { data: credential, error: credentialError } = await supabase
+  // ── BYOK check ───────────────────────────────────────────────────────────
+  // If the user has their own key for this provider, use it and skip billing entirely.
+  const { data: credential } = await supabase
     .from("ai_credentials")
     .select("encrypted_secret")
     .eq("user_id", userId)
@@ -364,9 +393,50 @@ serve(async (req) => {
     .eq("is_active", true)
     .single()
 
-  if (credentialError || !credential?.encrypted_secret) {
-    return json(400, { ok: false, error: `Missing active ${provider} credential` })
+  const isByok = !!credential?.encrypted_secret
+
+  // ── Billing pre-flight (only when not BYOK) ───────────────────────────────
+  if (!isByok) {
+    const masterKey = Deno.env.get(`MASTER_${provider.toUpperCase()}_KEY`)
+    if (!masterKey) {
+      return json(400, { ok: false, error: `No API key available for ${provider}. Add your own key in Settings.` })
+    }
+
+    // Check free tier
+    const { data: freeRow } = await supabase
+      .from("chatterbox_free_tier")
+      .select("responses")
+      .eq("user_id", userId)
+      .eq("date", new Date().toISOString().slice(0, 10))
+      .single()
+
+    const freeUsed = freeRow?.responses ?? 0
+    const freeRemaining = Math.max(0, FREE_TIER_LIMIT - freeUsed)
+
+    if (freeRemaining === 0) {
+      // Require minimum credit balance
+      const { data: creditsRow } = await supabase
+        .from("chatterbox_credits")
+        .select("balance")
+        .eq("user_id", userId)
+        .single()
+
+      const balance = creditsRow?.balance ?? 0
+      if (balance < MIN_CREDITS) {
+        return json(402, {
+          ok: false,
+          error: "insufficient_credits",
+          balance,
+          required: MIN_CREDITS,
+        })
+      }
+    }
   }
+
+  // ── Resolve API key ───────────────────────────────────────────────────────
+  const apiKey = isByok
+    ? credential!.encrypted_secret
+    : Deno.env.get(`MASTER_${provider.toUpperCase()}_KEY`)!
 
   const { data: messages, error: messagesError } = await supabase
     .from("ai_messages")
@@ -386,18 +456,72 @@ serve(async (req) => {
     ...((messages ?? []).map(m => ({ role: m.role as MessageRow["role"], content: m.content }))),
   ]
 
-  let reply = ""
+  // ── AI call ───────────────────────────────────────────────────────────────
+  let result: ProviderResult
   try {
-    reply = await callProvider(provider, credential.encrypted_secret, currentSpeaker, transcript)
+    result = await callProvider(provider, apiKey, currentSpeaker, transcript)
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Provider call failed"
     console.error("Provider error:", msg)
     return json(502, { ok: false, error: msg })
   }
 
+  // ── Billing post-call ─────────────────────────────────────────────────────
+  if (!isByok) {
+    const today = new Date().toISOString().slice(0, 10)
+
+    const { data: freeRow } = await supabase
+      .from("chatterbox_free_tier")
+      .select("responses")
+      .eq("user_id", userId)
+      .eq("date", today)
+      .single()
+
+    const freeUsed = freeRow?.responses ?? 0
+    const freeRemaining = Math.max(0, FREE_TIER_LIMIT - freeUsed)
+
+    if (freeRemaining > 0) {
+      // Consume a free response
+      await supabase
+        .from("chatterbox_free_tier")
+        .upsert(
+          { user_id: userId, date: today, responses: freeUsed + 1 },
+          { onConflict: "user_id,date" }
+        )
+      console.log("billing: free tier consumed, remaining:", freeRemaining - 1)
+    } else {
+      // Charge credits
+      const { rawCostUsd, creditsCharged } = calcCredits(provider, result.inputTokens, result.outputTokens)
+      console.log(`billing: ${result.inputTokens} in + ${result.outputTokens} out → $${rawCostUsd.toFixed(6)} raw → ${creditsCharged} credits`)
+
+      try {
+        await supabase.rpc("chatterbox_deduct_credits", {
+          p_user_id:    userId,
+          p_amount:     creditsCharged,
+          p_reason:     "ai_turn",
+          p_provider:   provider,
+          p_input_tok:  result.inputTokens,
+          p_output_tok: result.outputTokens,
+          p_raw_cost:   rawCostUsd,
+          p_markup:     MARKUP,
+          p_session_id: sessionId,
+        })
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "billing error"
+        console.error("Credit deduction failed:", msg)
+        // AI already responded — log but don't fail the request.
+        // A real implementation may want to flag this user for reconciliation.
+      }
+
+      // Track referral message progress
+      await trackReferralMessage(supabase, userId)
+    }
+  }
+
+  // ── Save AI message ───────────────────────────────────────────────────────
   const { data: newMessage, error: insertError } = await supabase
     .from("ai_messages")
-    .insert({ session_id: session.id, role: currentSpeaker, content: reply })
+    .insert({ session_id: session.id, role: currentSpeaker, content: result.text })
     .select("*")
     .single()
 
@@ -424,5 +548,47 @@ serve(async (req) => {
     })
   }
 
-  return json(200, { ok: true, session: updatedSession, message: newMessage })
+  const { rawCostUsd } = calcCredits(provider, result.inputTokens, result.outputTokens)
+  return json(200, { ok: true, session: updatedSession, message: newMessage, cost_usd: rawCostUsd })
 })
+
+// ── Referral helper ───────────────────────────────────────────────────────────
+async function trackReferralMessage(supabase: ReturnType<typeof createClient>, userId: string) {
+  try {
+    const { data: referral } = await supabase
+      .from("chatterbox_referrals")
+      .select("id, referrer_id, invitee_messages")
+      .eq("invitee_id", userId)
+      .eq("status", "pending")
+      .single()
+
+    if (!referral) return
+
+    const newCount = referral.invitee_messages + 1
+
+    if (newCount >= 10) {
+      // Award referrer 100 credits, invitee 50 credits
+      await supabase.rpc("chatterbox_add_credits", {
+        p_user_id: referral.referrer_id,
+        p_amount:  100,
+        p_reason:  "referral_reward",
+      })
+      await supabase.rpc("chatterbox_add_credits", {
+        p_user_id: userId,
+        p_amount:  50,
+        p_reason:  "referral_reward",
+      })
+      await supabase
+        .from("chatterbox_referrals")
+        .update({ status: "rewarded", invitee_messages: newCount, rewarded_at: new Date().toISOString() })
+        .eq("id", referral.id)
+    } else {
+      await supabase
+        .from("chatterbox_referrals")
+        .update({ invitee_messages: newCount })
+        .eq("id", referral.id)
+    }
+  } catch (err) {
+    console.error("Referral tracking error:", err)
+  }
+}

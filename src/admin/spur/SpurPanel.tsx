@@ -286,12 +286,20 @@ export function SpurPanel({ site, userId, supabase }: { site: Site; userId: stri
         {header}
         <div style={{ flex: 1, overflow: "hidden" }}>
           <SpurPostEditor
+            key={editingPost === "new" ? "new" : editingPost?.id ?? "new"}
             post={editingPost === "new" ? null : editingPost}
             siteId={activeSiteId}
             userId={userId}
             supabase={supabase}
             onSaved={handleSaved}
             onCancel={() => setEditingPost(null)}
+            onNavigate={(p) => setEditingPost(p)}
+            serialPosts={
+              editingPost !== "new" && editingPost?.is_serial && editingPost?.serial_id
+                ? posts.filter(p => p.serial_id === editingPost.serial_id)
+                : undefined
+            }
+            onReorder={(updated) => setPosts(prev => prev.map(p => updated.find(u => u.id === p.id) ?? p))}
             theme={theme}
             darkMode={darkMode}
             canDraft={canDraft}

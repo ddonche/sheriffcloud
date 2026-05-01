@@ -34,7 +34,7 @@ layouts:
 
       SCRIPTS:
         - "BRINDLE::SCRIPTS"
-
+        
   docs:
     slots:
       STYLELINK:
@@ -53,26 +53,18 @@ layouts:
         - "PROSPECTOR::SEARCH_INPUT"
       REPO:
         - "BADGE::REPO"
-
-      # HEADER NAV: use the 'header' menu as DROPDOWN
       HEADER_NAV:
         - "SCOUT::header_DROPDOWN"
-
-      # LEFT NAV: use the 'left_docs' menu as SIDEBAR
       LEFT_NAV:
         - "SCOUT::left_docs_SIDEBAR"
-
       SIDEBAR_TOP:
       SIDEBAR_MAIN:
         - "SCOUT::BREADCRUMBS"
         - "SCOUT::TOC"
-
-      # FOOTERS: use footer_* menus as FLAT
       FOOTER_LEFT:
         - "SCOUT::footer_left_FLAT"
       FOOTER_RIGHT:
         - "SCOUT::footer_right_FLAT"
-
       HEADERLEFT:
         - "PAGE::META"
       HEADERRIGHT:
@@ -81,24 +73,43 @@ layouts:
         - "BADGE::READTIME"
       PAGEMETARIGHT:
         - "BADGE::UTILICONS"
-
       SCRIPTS:
         - "BRINDLE::SCRIPTS"
 
   wiki:
     slots:
-      # ... same header boilerplate as docs ...
+      STYLELINK:
+        - "BRINDLE::STYLE"
+      LOGO:
+        - "BRINDLE::LOGO"
+      BRANDNAME:
+        - "BRINDLE::BRANDNAME"
+      VERSION:
+        - "BADGE::VERSION"
+      THEMESWITCHER:
+        - "BRINDLE::THEMESWITCHER"
+      VERSIONSWITCHER:
+        - "BRINDLE::VERSIONSWITCHER"
+      SEARCH:
+        - "PROSPECTOR::SEARCH_INPUT"
+      REPO:
+        - "BADGE::REPO"
+      HEADER_NAV:
+        - "SCOUT::header_DROPDOWN"
       LEFT_NAV:
         - "SCOUT::left_wiki_SIDEBAR"
       SIDEBAR_TOP:
-        - "WIKI::WHATLINKSHERE"
+        - "SCOUT::WHATLINKSHERE"
       SIDEBAR_MAIN:
         - "SCOUT::BREADCRUMBS"
-        - "WIKI::CATEGORIES_NAV"
-      WIKI_INFOBOX:
-        - "WIKI::INFOBOX"
+        - "SCOUT::CATEGORIES_NAV"
       WIKI_CATEGORIES:
-        - "WIKI::CATEGORY_TAGS"
+        - "SCOUT::CATEGORY_TAGS"
+      WIKI_PAGETABS:
+      FOOTER_LEFT:
+        - "SCOUT::footer_left_FLAT"
+      FOOTER_RIGHT:
+        - "SCOUT::footer_right_FLAT"
       HEADERLEFT:
         - "PAGE::META"
       HEADERRIGHT:
@@ -106,6 +117,8 @@ layouts:
       PAGEMETALEFT:
       PAGEMETARIGHT:
         - "BADGE::UTILICONS"
+      SCRIPTS:
+        - "BRINDLE::SCRIPTS"
 
   blog:
     slots:
@@ -125,23 +138,17 @@ layouts:
         - "PROSPECTOR::SEARCH_INPUT"
       REPO:
         - "BADGE::REPO"
-
-      # Same main header nav
       HEADER_NAV:
         - "SCOUT::header_DROPDOWN"
-
       LEFT_NAV: []
-
       SIDEBAR_TOP:
       SIDEBAR_MAIN:
         - "SCOUT::BREADCRUMBS"
         - "CAMPFIRE::BLOG_LIST"
-
       FOOTER_LEFT:
         - "SCOUT::footer_left_FLAT"
       FOOTER_RIGHT:
         - "SCOUT::footer_right_FLAT"
-
       HEADERLEFT:
         - "PAGE::META"
       HEADERRIGHT:
@@ -150,7 +157,6 @@ layouts:
         - "BADGE::READTIME"
       PAGEMETARIGHT:
         - "BADGE::UTILICONS"
-
       SCRIPTS:
         - "BRINDLE::SCRIPTS"
 
@@ -172,16 +178,12 @@ layouts:
         - "PROSPECTOR::SEARCH_INPUT"
       REPO:
         - "BADGE::REPO"
-
       HEADER_NAV:
         - "SCOUT::header_DROPDOWN"
-
       LEFT_NAV: []
-
       SIDEBAR_TOP:
       SIDEBAR_MAIN:
         - "CAMPFIRE::BLOG_LIST"
-
       FOOTER_LEFT:
         - "SCOUT::footer_left_FLAT"
       FOOTER_RIGHT:
