@@ -184,7 +184,7 @@ export function SpurPostEditor({
     (serialPosts ?? []).slice().sort((a, b) => (a.serial_index ?? 0) - (b.serial_index ?? 0))
   )
   const [reordering, setReordering] = useState(false)
-  const [railVisible, setRailVisible] = useState(true)
+  const [railVisible, setRailVisible] = useState(() => typeof window !== "undefined" && window.innerWidth > 600)
   const dragIndex = useRef<number | null>(null)
   const dragOverIndex = useRef<number | null>(null)
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
@@ -593,7 +593,7 @@ export function SpurPostEditor({
         @import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=Lora:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Geist+Mono:wght@400;500&display=swap');
         .spur-editor .ProseMirror { outline: none; min-height: 520px; font-family: "Lora", Georgia, serif; font-size: 19px; line-height: 1.9; color: ${theme.text}; caret-color: ${theme.accent}; }
         .spur-editor .ProseMirror > * + * { margin-top: 0.9em; }
-        .spur-editor .ProseMirror p { margin: 0; }
+        .spur-editor .ProseMirror p { margin: 0 0 1em; }
         .spur-editor .ProseMirror h1 { font-family: "Geist", system-ui, sans-serif; font-size: 1.9em; font-weight: 800; line-height: 1.15; color: ${theme.text}; letter-spacing: -0.025em; margin-bottom: 0.2em; }
         .spur-editor .ProseMirror h2 { font-family: "Geist", system-ui, sans-serif; font-size: 1.4em; font-weight: 700; line-height: 1.25; color: ${theme.text}; letter-spacing: -0.02em; margin-bottom: 0.2em; }
         .spur-editor .ProseMirror h3 { font-family: "Geist", system-ui, sans-serif; font-size: 1.1em; font-weight: 700; line-height: 1.35; color: ${theme.text}; letter-spacing: -0.01em; margin-bottom: 0.2em; }
@@ -613,6 +613,17 @@ export function SpurPostEditor({
         .spur-editor .ProseMirror p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: ${theme.dim}; pointer-events: none; float: left; height: 0; font-style: italic; font-family: "Lora", Georgia, serif; }
         .spur-select-dropdown::-webkit-scrollbar { display: none; }
         .spur-chapter-rail::-webkit-scrollbar { display: none; }
+        .spur-label-short { display: none; }
+        .spur-toolbar::-webkit-scrollbar { display: none; }
+        .spur-top-chrome::-webkit-scrollbar { display: none; }
+        .spur-canvas-wrap { padding-left: 32px; padding-right: 32px; }
+        @media (max-width: 600px) {
+          .spur-label-full { display: none !important; }
+          .spur-label-short { display: inline !important; }
+          .spur-canvas-wrap { padding-left: 0; padding-right: 0; }
+          .spur-editor-canvas { padding-left: 20px !important; padding-right: 20px !important; }
+          .spur-editor .ProseMirror { font-size: 17px !important; }
+        }
       `}</style>
 
       {/* Chapter rail */}
@@ -672,8 +683,7 @@ export function SpurPostEditor({
       <div style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0 }}>
 
       {/* Top chrome */}
-      {/* Top chrome */}
-      <div
+      <div className="spur-top-chrome"
         style={{
           flexShrink: 0,
           height: 52,
@@ -683,6 +693,8 @@ export function SpurPostEditor({
           padding: "0 20px 0 28px",
           background: theme.surface,
           borderBottom: `1px solid ${theme.border}`,
+          overflowX: "auto",
+          scrollbarWidth: "none",
         }}
       >
         {showChapterRail && (
@@ -792,7 +804,9 @@ export function SpurPostEditor({
 
       {/* Scrollable area */}
       <div style={{ flex: 1, overflowY: "auto", background: theme.bg, position: "relative" }}>
-        <div style={{ maxWidth: 780, margin: "0 auto", padding: "44px 32px 100px" }}>
+
+        {/* TOP HALF — meta */}
+        <div style={{ maxWidth: 780, margin: "0 auto", padding: "44px 32px 24px" }} className="spur-meta">
           {error && <div style={{ marginBottom: 24, padding: "12px 16px", background: theme.redDim, border: `1px solid ${theme.red}40`, borderRadius: 8, fontSize: 14, color: theme.red, fontFamily: SPURF }}>{error}</div>}
 
           <textarea value={title} onChange={e => handleTitleChange(e.target.value)} placeholder="Post title" rows={2}
@@ -809,13 +823,13 @@ export function SpurPostEditor({
                 style={{ width: "100%", background: "transparent", border: "none", borderBottom: `1px solid ${theme.border}`, outline: "none", padding: "4px 0", fontSize: 12, color: theme.accent, fontFamily: SPURM }} />
             </div>
             <div>
-              <div style={{ fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: theme.dim, fontFamily: SPURM, fontWeight: 500, marginBottom: 5 }}>Publish date</div>
+              <div style={{ fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: theme.dim, fontFamily: SPURM, fontWeight: 500, marginBottom: 5 }}><span className="spur-label-full">Publish </span>Date</div>
               <input type="date" defaultValue={post?.published_at ? post.published_at.slice(0, 10) : ""}
                 style={{ width: "100%", background: "transparent", border: "none", borderBottom: `1px solid ${theme.border}`, outline: "none", padding: "4px 0", fontSize: 12, color: theme.muted, fontFamily: SPURF, colorScheme: darkMode ? "dark" : "light" }} />
             </div>
             <div>
               <div style={{ fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: theme.dim, fontFamily: SPURM, fontWeight: 500, marginBottom: 5 }}>
-                Thumbnail <span style={{ textTransform: "none", letterSpacing: 0, fontWeight: 400, color: theme.dim }}>— 680×383 (16:9)</span>
+                <span className="spur-label-full">Thumbnail</span><span className="spur-label-short">Thumb</span> <span style={{ textTransform: "none", letterSpacing: 0, fontWeight: 400, color: theme.dim }}>— <span className="spur-label-full">680×383 </span>(16:9)</span>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, borderBottom: `1px solid ${theme.border}`, padding: "4px 0" }}>
                 <button onClick={() => thumbInputRef.current?.click()} disabled={thumbUploading}
@@ -1086,17 +1100,26 @@ export function SpurPostEditor({
             </>
           )}
 
-          {/* Editor canvas */}
+          {/* BOTTOM HALF — canvas */}
+          </div>{/* end spur-meta */}
+          <div className="spur-canvas-wrap" style={{ maxWidth: 780, margin: "0 auto", paddingBottom: 100 }}>
           <div style={{ background: canvasBg, border: `1px solid ${canvasBorder}`, borderTop: "none", borderRadius: "0 0 10px 10px" }}>
-            <div style={{ position: "sticky", top: 0, zIndex: 10, background: canvasBg, borderBottom: `1px solid ${canvasBorder}`, display: "flex", alignItems: "stretch" }}>
+            <div className="spur-toolbar" style={{ position: "sticky", top: 0, zIndex: 10, background: canvasBg, borderBottom: `1px solid ${canvasBorder}`, display: "flex", alignItems: "stretch" }}>
               <TB onClick={() => editor?.chain().focus().toggleBold().run()} active={editor?.isActive("bold")} title="Bold"><svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><path d="M6 4h8a4 4 0 010 8H6z"/><path d="M6 12h9a4 4 0 010 8H6z"/></svg></TB>
               <TB onClick={() => editor?.chain().focus().toggleItalic().run()} active={editor?.isActive("italic")} title="Italic"><svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="4" x2="10" y2="4"/><line x1="14" y1="20" x2="5" y2="20"/><line x1="15" y1="4" x2="9" y2="20"/></svg></TB>
               <TB onClick={() => editor?.chain().focus().toggleUnderline().run()} active={editor?.isActive("underline")} title="Underline"><svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><path d="M6 3v7a6 6 0 0012 0V3"/><line x1="4" y1="21" x2="20" y2="21"/></svg></TB>
               <TB onClick={() => editor?.chain().focus().toggleStrike().run()} active={editor?.isActive("strike")} title="Strikethrough"><svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="12" x2="20" y2="12"/><path d="M17.5 6.5C17.5 5 16 4 14 4H10C7.8 4 6 5.8 6 8c0 2 1.5 3 3.5 3.5"/><path d="M6.5 17.5C6.5 19 8 20 10 20h4c2.2 0 4-1.8 4-4 0-1.8-1.2-2.8-3-3.3"/></svg></TB>
               <TSep />
-              <TB onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()} active={editor?.isActive("heading", { level: 1 })} title="H1"><span style={{ fontSize: 11, fontWeight: 800, fontFamily: SPURF, letterSpacing: "-0.03em", lineHeight: 1 }}>H1</span></TB>
-              <TB onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()} active={editor?.isActive("heading", { level: 2 })} title="H2"><span style={{ fontSize: 11, fontWeight: 800, fontFamily: SPURF, letterSpacing: "-0.03em", lineHeight: 1 }}>H2</span></TB>
-              <TB onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()} active={editor?.isActive("heading", { level: 3 })} title="H3"><span style={{ fontSize: 11, fontWeight: 800, fontFamily: SPURF, letterSpacing: "-0.03em", lineHeight: 1 }}>H3</span></TB>
+              <TB onClick={() => {
+                if (editor?.isActive("heading", { level: 1 })) editor?.chain().focus().toggleHeading({ level: 1 }).run()
+                else if (editor?.isActive("heading", { level: 2 })) editor?.chain().focus().toggleHeading({ level: 2 }).run()
+                else if (editor?.isActive("heading", { level: 3 })) editor?.chain().focus().toggleHeading({ level: 3 }).run()
+                else editor?.chain().focus().toggleHeading({ level: 1 }).run()
+              }} active={editor?.isActive("heading")} title="Heading">
+                <span style={{ fontSize: 11, fontWeight: 800, fontFamily: SPURF, letterSpacing: "-0.03em", lineHeight: 1 }}>
+                  {editor?.isActive("heading", { level: 2 }) ? "H2" : editor?.isActive("heading", { level: 3 }) ? "H3" : "H1"}
+                </span>
+              </TB>
               <TSep />
               <TB onClick={() => editor?.chain().focus().toggleBulletList().run()} active={editor?.isActive("bulletList")} title="Bullet list"><svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><circle cx="4" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="4" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="4" cy="18" r="1.2" fill="currentColor" stroke="none"/></svg></TB>
               <TB onClick={() => editor?.chain().focus().toggleOrderedList().run()} active={editor?.isActive("orderedList")} title="Numbered list"><svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><path d="M4 6h1v4M4 10h2" strokeWidth={1.8}/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1" strokeWidth={1.8}/></svg></TB>
@@ -1106,14 +1129,12 @@ export function SpurPostEditor({
               <TB onClick={() => { if (editor?.isActive("link")) { editor?.chain().focus().unsetLink().run() } else { const url = window.prompt("URL"); if (url) editor?.chain().focus().setLink({ href: url }).run() } }} active={editor?.isActive("link")} title="Link"><svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg></TB>
               <TB onClick={() => { const url = window.prompt("Image URL"); if (url) editor?.chain().focus().setImage({ src: url }).run() }} title="Image"><svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></TB>
               <TB onClick={() => editor?.chain().focus().setHorizontalRule().run()} title="Divider"><svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><line x1="3" y1="12" x2="21" y2="12"/></svg></TB>
-              <TSep />
-              <TB onClick={() => editor?.chain().focus().undo().run()} title="Undo"><svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 00-4-4H4"/></svg></TB>
-              <TB onClick={() => editor?.chain().focus().redo().run()} title="Redo"><svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 014-4h12"/></svg></TB>
+            
             </div>
-            <div className="spur-editor" style={{ padding: "36px 52px 72px" }}>
+            <div className="spur-editor spur-editor-canvas" style={{ padding: "36px 52px 72px" }}>
               <EditorContent editor={editor} />
             </div>
-            <div style={{ padding: "10px 52px 14px", borderTop: `1px solid ${canvasBorder}`, display: "flex", alignItems: "center", gap: 16 }}>
+            <div className="spur-editor-footer" style={{ padding: "10px 52px 14px", borderTop: `1px solid ${canvasBorder}`, display: "flex", alignItems: "center", gap: 16 }}>
               <span style={{ fontSize: 11, color: theme.dim, fontFamily: SPURM }}>
                 {wordCount.toLocaleString()} words
               </span>
@@ -1123,9 +1144,9 @@ export function SpurPostEditor({
                 </span>
               )}
             </div>
-          </div>
-        </div>
-      </div>
+          </div>{/* end canvas inner */}
+          </div>{/* end spur-canvas-wrap */}
+      </div>{/* end scrollable */}
       </div>
     </div>
   )

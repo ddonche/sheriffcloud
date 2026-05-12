@@ -1,5 +1,6 @@
-import { useRef, useState, useEffect } from "react"
+import React, { useRef, useState, useEffect } from "react"
 import type { SpurSerial } from "./spurTypes"
+import type { SpurPost } from "./spurTypes"
 import type { SpurTheme } from "./spurTheme"
 import { SPURF, SPURM } from "./spurTheme"
 import type { SpurCollection } from "./SpurCollectionsPanel"
@@ -277,6 +278,7 @@ export function SpurSerialsPanel({
   loading,
   onChanged,
   collections,
+  onOpenPost,
 }: {
   siteId: string
   userId: string
@@ -286,23 +288,55 @@ export function SpurSerialsPanel({
   loading: boolean
   onChanged: () => Promise<void> | void
   collections: SpurCollection[]
+  onOpenPost?: (post: SpurPost) => void
 }) {
-  const [creating, setCreating] = useState(false)
-  const [createState, setCreateState] = useState<EditState>(makeEditState())
-  const [saving, setSaving] = useState(false)
-  const [createError, setCreateError] = useState<string | null>(null)
-  const createCoverRef = useRef<HTMLInputElement>(null)
+  // Create / edit form state
+  const [mode, setMode] = useState<"grid" | "create" | "edit">("grid")
+  const [editingSerial, setEditingSerial] = useState<SpurSerial | null>(null)
+  const [formState, setFormState] = useState<EditState>(makeEditState())
+  const [formSaving, setFormSaving] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
+  const formCoverRef = useRef<HTMLInputElement>(null)
 
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editState, setEditState] = useState<EditState>(makeEditState())
-  const [editSaving, setEditSaving] = useState(false)
-  const [editError, setEditError] = useState<string | null>(null)
-  const editCoverRef = useRef<HTMLInputElement>(null)
-
+  // Selected serial + chapters
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [chaptersBySerial, setChaptersBySerial] = useState<Record<string, SpurPost[]>>({})
+  const [chaptersLoading, setChaptersLoading] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  async function uploadCover(file: File, setState: React.Dispatch<React.SetStateAction<EditState>>) {
-    setState(p => ({ ...p, coverUploading: true, coverUploadError: null }))
+  async function loadChapters(serialId: string) {
+    if (chaptersBySerial[serialId]) return
+    setChaptersLoading(true)
+    const { data } = await supabase
+      .from("spur_posts")
+      .select("id, title, content, serial_index, serial_id, is_serial, slug, status, site_id, author_id, excerpt, thumbnail_url, tags, content_meta, published_at, created_at, updated_at")
+      .eq("serial_id", serialId)
+      .order("serial_index", { ascending: true })
+    setChaptersBySerial(prev => ({ ...prev, [serialId]: data ?? [] }))
+    setChaptersLoading(false)
+  }
+
+  function selectSerial(s: SpurSerial) {
+    setSelectedId(s.id)
+    setMode("grid")
+    loadChapters(s.id)
+  }
+
+  function openCreate() {
+    setMode("create")
+    setFormState(makeEditState())
+    setFormError(null)
+  }
+
+  function openEdit(s: SpurSerial) {
+    setEditingSerial(s)
+    setMode("edit")
+    setFormState(makeEditState(s))
+    setFormError(null)
+  }
+
+  async function uploadCover(file: File) {
+    setFormState(p => ({ ...p, coverUploading: true, coverUploadError: null }))
     try {
       const ext = (file.name.split(".").pop() || "jpg").toLowerCase()
       const safeExt = ["jpg", "jpeg", "png", "webp"].includes(ext) ? ext : "jpg"
@@ -312,65 +346,57 @@ export function SpurSerialsPanel({
         .upload(path, file, { upsert: false, contentType: `image/${safeExt === "jpg" ? "jpeg" : safeExt}` })
       if (upErr) throw new Error(upErr.message)
       const { data: { publicUrl } } = supabase.storage.from("spur-media").getPublicUrl(path)
-      setState(p => ({ ...p, cover_image_url: publicUrl, coverUploading: false }))
+      setFormState(p => ({ ...p, cover_image_url: publicUrl, coverUploading: false }))
     } catch (err: any) {
-      setState(p => ({ ...p, coverUploading: false, coverUploadError: err.message ?? "Upload failed." }))
+      setFormState(p => ({ ...p, coverUploading: false, coverUploadError: err.message ?? "Upload failed." }))
     }
   }
 
   async function handleCreate() {
-    if (!createState.title.trim()) { setCreateError("Title is required."); return }
-    if (createState.collection_id && !createState.collection_sort_order) { setCreateError("Book # is required when assigning to a collection."); return }
-    setSaving(true); setCreateError(null)
+    if (!formState.title.trim()) { setFormError("Title is required."); return }
+    if (formState.collection_id && !formState.collection_sort_order) { setFormError("Book # is required when assigning to a collection."); return }
+    setFormSaving(true); setFormError(null)
     try {
-      const { error } = await supabase.from("spur_serials").insert({
-        site_id: siteId,
-        author_id: userId,
-        title: createState.title.trim(),
-        slug: slugify(createState.title.trim()),
-        tagline: createState.tagline.trim() || null,
-        description: createState.description.trim() || null,
-        unit_label: createState.unit_label,
-        status: createState.status,
-        cover_image_url: createState.cover_image_url,
-        collection_id: createState.collection_id ?? null,
-        collection_sort_order: createState.collection_sort_order ?? null,
-      })
+      const { data, error } = await supabase.from("spur_serials").insert({
+        site_id: siteId, author_id: userId,
+        title: formState.title.trim(), slug: slugify(formState.title.trim()),
+        tagline: formState.tagline.trim() || null, description: formState.description.trim() || null,
+        unit_label: formState.unit_label, status: formState.status,
+        cover_image_url: formState.cover_image_url,
+        collection_id: formState.collection_id ?? null, collection_sort_order: formState.collection_sort_order ?? null,
+      }).select().single()
       if (error) throw new Error(error.message)
-      setCreateState(makeEditState())
-      setCreating(false)
       await onChanged()
+      setMode("grid")
+      if (data) { setSelectedId(data.id); loadChapters(data.id) }
     } catch (err: any) {
-      setCreateError(err.message ?? "Failed to create serial.")
+      setFormError(err.message ?? "Failed to create serial.")
     } finally {
-      setSaving(false)
+      setFormSaving(false)
     }
   }
 
-  async function handleSaveEdit(id: string) {
-    if (!editState.title.trim()) { setEditError("Title is required."); return }
-    if (editState.collection_id && !editState.collection_sort_order) { setEditError("Book # is required when assigning to a collection."); return }
-    setEditSaving(true); setEditError(null)
+  async function handleSaveEdit() {
+    if (!formState.title.trim()) { setFormError("Title is required."); return }
+    if (formState.collection_id && !formState.collection_sort_order) { setFormError("Book # is required when assigning to a collection."); return }
+    if (!editingSerial) return
+    setFormSaving(true); setFormError(null)
     try {
       const { error } = await supabase.from("spur_serials").update({
-        title: editState.title.trim(),
-        slug: slugify(editState.title.trim()),
-        tagline: editState.tagline.trim() || null,
-        description: editState.description.trim() || null,
-        unit_label: editState.unit_label,
-        status: editState.status,
-        cover_image_url: editState.cover_image_url,
-        collection_id: editState.collection_id ?? null,
-        collection_sort_order: editState.collection_sort_order ?? null,
+        title: formState.title.trim(), slug: slugify(formState.title.trim()),
+        tagline: formState.tagline.trim() || null, description: formState.description.trim() || null,
+        unit_label: formState.unit_label, status: formState.status,
+        cover_image_url: formState.cover_image_url,
+        collection_id: formState.collection_id ?? null, collection_sort_order: formState.collection_sort_order ?? null,
         updated_at: new Date().toISOString(),
-      }).eq("id", id)
+      }).eq("id", editingSerial.id)
       if (error) throw new Error(error.message)
-      setEditingId(null)
       await onChanged()
+      setMode("grid")
     } catch (err: any) {
-      setEditError(err.message ?? "Save failed.")
+      setFormError(err.message ?? "Save failed.")
     } finally {
-      setEditSaving(false)
+      setFormSaving(false)
     }
   }
 
@@ -378,155 +404,178 @@ export function SpurSerialsPanel({
     if (!confirm(`Delete "${s.title}"? Posts attached to this serial will be unlinked.`)) return
     setDeletingId(s.id)
     await supabase.from("spur_serials").delete().eq("id", s.id)
+    if (selectedId === s.id) setSelectedId(null)
     setDeletingId(null)
     await onChanged()
   }
 
+  const selectedSerial = serials.find(s => s.id === selectedId) ?? null
+  const activeSerial = selectedSerial ?? (mode === "edit" && editingSerial ? (serials.find(s => s.id === editingSerial.id) ?? editingSerial) : null)
+  const activeChapters = activeSerial ? (chaptersBySerial[activeSerial.id] ?? []) : []
+  const activeTotalWords = activeChapters.reduce((acc, p) => acc + (p.content ?? "").replace(/<[^>]+>/g, " ").trim().split(/\s+/).filter(Boolean).length, 0)
+
+  // Left column content: grid or form
+  const leftContent = (mode === "create" || mode === "edit") ? (
+    <div style={{ width: "100%", background: theme.surface, border: `1px solid ${theme.accent}44`, borderRadius: 10, padding: 24 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: theme.dim, letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: SPURM, marginBottom: 20 }}>
+        {mode === "create" ? "New Serial" : "Edit Serial"}
+      </div>
+      <input ref={formCoverRef} type="file" accept="image/*" style={{ display: "none" }}
+        onChange={e => { const f = e.target.files?.[0]; if (f) uploadCover(f); e.target.value = "" }} />
+      <FormFields state={formState} setState={setFormState} inputRef={formCoverRef} theme={theme} collections={collections} />
+      {formError && (
+        <div style={{ marginTop: 16, padding: "10px 14px", background: theme.redDim, border: `1px solid ${theme.red}40`, borderRadius: 7, fontSize: 13, color: theme.red, fontFamily: SPURF }}>
+          {formError}
+        </div>
+      )}
+      <FormActions
+        onCancel={() => { setMode("grid"); setFormError(null) }}
+        onSubmit={mode === "create" ? handleCreate : handleSaveEdit}
+        submitting={formSaving}
+        canSubmit={!!formState.title.trim() && (!formState.collection_id || !!formState.collection_sort_order)}
+        submitLabel={mode === "create" ? "Create Serial" : "Save"}
+        submittingLabel={mode === "create" ? "Creating…" : "Saving…"}
+        theme={theme}
+      />
+    </div>
+  ) : loading ? (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, color: theme.dim, fontFamily: SPURF, fontSize: 15 }}>
+      <div style={{ width: 18, height: 18, border: `2px solid ${theme.border}`, borderTopColor: theme.accent, borderRadius: "50%", animation: "spur-spin 0.7s linear infinite" }} />
+      Loading…
+    </div>
+  ) : serials.length === 0 ? (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 200, gap: 10 }}>
+      <div style={{ fontSize: 36, opacity: 0.1 }}>📖</div>
+      <div style={{ fontSize: 15, color: theme.muted, fontFamily: SPURF }}>No serials yet.</div>
+    </div>
+  ) : (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 180px)", gap: 16, width: 964 }}>
+      {serials.map(s => {
+        const isSelected = selectedId === s.id
+        return (
+          <div key={s.id} onClick={() => selectSerial(s)}
+            style={{ borderRadius: 10, overflow: "hidden", background: theme.surface, border: `2px solid ${isSelected ? theme.accent : theme.border}`, cursor: "pointer", transition: "border-color 0.12s, box-shadow 0.12s", boxShadow: isSelected ? `0 0 0 3px ${theme.accent}33` : "none" }}
+            onMouseEnter={e => { if (!isSelected) e.currentTarget.style.borderColor = theme.muted }}
+            onMouseLeave={e => { if (!isSelected) e.currentTarget.style.borderColor = theme.border }}>
+            {/* Cover */}
+            <div style={{ height: 160, background: theme.borderLight, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden" }}>
+              {s.cover_image_url
+                ? <img src={s.cover_image_url} alt={s.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                : <svg viewBox="0 0 24 24" width={32} height={32} fill="none" stroke={theme.dim} strokeWidth={1} strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+                  </svg>
+              }
+              {/* Action buttons overlay */}
+              <div style={{ position: "absolute", top: 6, right: 6, display: "flex", gap: 4 }}
+                onClick={e => e.stopPropagation()}>
+                <button type="button" onClick={() => openEdit(s)}
+                  style={{ width: 28, height: 28, borderRadius: 6, border: "none", background: "rgba(0,0,0,0.55)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)", transition: "background 0.1s" }}
+                  onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.8)"}
+                  onMouseLeave={e => e.currentTarget.style.background = "rgba(0,0,0,0.55)"}
+                  title="Edit">
+                  <svg viewBox="0 0 24 24" width={13} height={13} fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                </button>
+                <button type="button" onClick={() => handleDelete(s)} disabled={deletingId === s.id}
+                  style={{ width: 28, height: 28, borderRadius: 6, border: "none", background: "rgba(0,0,0,0.55)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)", transition: "background 0.1s", opacity: deletingId === s.id ? 0.4 : 1 }}
+                  onMouseEnter={e => e.currentTarget.style.background = "rgba(180,30,30,0.8)"}
+                  onMouseLeave={e => e.currentTarget.style.background = "rgba(0,0,0,0.55)"}
+                  title="Delete">
+                  <svg viewBox="0 0 640 640" width={13} height={13} fill="#fff">
+                    <path d="M232.7 69.9L224 96L128 96C110.3 96 96 110.3 96 128C96 145.7 110.3 160 128 160L512 160C529.7 160 544 145.7 544 128C544 110.3 529.7 96 512 96L416 96L407.3 69.9C402.9 56.8 390.7 48 376.9 48L263.1 48C249.3 48 237.1 56.8 232.7 69.9zM512 208L128 208L149.1 531.1C150.7 556.4 171.7 576 197 576L443 576C468.3 576 489.3 556.4 490.9 531.1L512 208z"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            {/* Info */}
+            <div style={{ padding: "10px 12px 12px" }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: theme.text, fontFamily: SPURF, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 6 }}>{s.title}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                <StatusBadge status={s.status} theme={theme} />
+                <span style={{ fontSize: 11, color: theme.dim, fontFamily: SPURM }}>{s.unit_label}</span>
+              </div>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+
   return (
-    <div style={{ maxWidth: 760 }}>
+    <div style={{ display: "flex", flexDirection: "column" }}>
       <style>{`@keyframes spur-spin { to { transform: rotate(360deg) } }`}</style>
 
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 32 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: theme.dim, letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: SPURM }}>
+      {/* Header row */}
+      <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 24, flexWrap: "wrap" }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: theme.dim, letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: SPURM, flexShrink: 0 }}>
           Serials {serials.length > 0 && `(${serials.length})`}
         </div>
-        {!creating && (
-          <button type="button"
-            onClick={() => { setCreating(true); setCreateState(makeEditState()); setCreateError(null) }}
-            style={{ padding: "9px 16px", borderRadius: 7, border: "none", background: theme.accent, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: SPURF, display: "flex", alignItems: "center", gap: 6, transition: "background 0.12s" }}
-            onMouseEnter={e => e.currentTarget.style.background = theme.accentHov}
-            onMouseLeave={e => e.currentTarget.style.background = theme.accent}>
-            <svg viewBox="0 0 640 640" width={9} height={9} fill="currentColor">
-              <path d="M320 64C306.7 64 296 74.7 296 88L296 296L88 296C74.7 296 64 306.7 64 320C64 333.3 74.7 344 88 344L296 344L296 552C296 565.3 306.7 576 320 576C333.3 576 344 565.3 344 552L344 344L552 344C565.3 344 576 333.3 576 320C576 306.7 565.3 296 552 296L344 296L344 88C344 74.7 333.3 64 320 64z"/>
-            </svg>
-            New Serial
-          </button>
+        {activeSerial && (
+          <>
+            <div style={{ width: 1, height: 16, background: theme.border, flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ fontSize: 15, fontWeight: 700, color: theme.text, fontFamily: SPURF, marginRight: 12 }}>{activeSerial.title}</span>
+              <span style={{ fontSize: 12, color: theme.dim, fontFamily: SPURM }}>
+                {chaptersLoading ? "Loading…" : `${activeChapters.length} ${activeSerial.unit_label?.toLowerCase()}${activeChapters.length !== 1 ? "s" : ""} · ${activeTotalWords.toLocaleString()} words`}
+              </span>
+            </div>
+          </>
         )}
+        <div style={{ marginLeft: "auto", flexShrink: 0 }}>
+          {mode === "grid" && (
+            <button type="button" onClick={openCreate}
+              style={{ padding: "9px 16px", borderRadius: 7, border: "none", background: theme.accent, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: SPURF, display: "flex", alignItems: "center", gap: 6, transition: "background 0.12s" }}
+              onMouseEnter={e => e.currentTarget.style.background = theme.accentHov}
+              onMouseLeave={e => e.currentTarget.style.background = theme.accent}>
+              <svg viewBox="0 0 640 640" width={9} height={9} fill="currentColor">
+                <path d="M320 64C306.7 64 296 74.7 296 88L296 296L88 296C74.7 296 64 306.7 64 320C64 333.3 74.7 344 88 344L296 344L296 552C296 565.3 306.7 576 320 576C333.3 576 344 565.3 344 552L344 344L552 344C565.3 344 576 333.3 576 320C576 306.7 565.3 296 552 296L344 296L344 88C344 74.7 333.3 64 320 64z"/>
+              </svg>
+              New Serial
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Create form */}
-      {creating && (
-        <div style={{ background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: 10, padding: 24, marginBottom: 32 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: theme.dim, letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: SPURM, marginBottom: 20 }}>
-            New Serial
-          </div>
-          <input ref={createCoverRef} type="file" accept="image/*" style={{ display: "none" }}
-            onChange={e => { const f = e.target.files?.[0]; if (f) uploadCover(f, setCreateState); e.target.value = "" }} />
-          <FormFields state={createState} setState={setCreateState} inputRef={createCoverRef} theme={theme} collections={collections} />
-          {createError && (
-            <div style={{ marginTop: 16, padding: "10px 14px", background: theme.redDim, border: `1px solid ${theme.red}40`, borderRadius: 7, fontSize: 13, color: theme.red, fontFamily: SPURF }}>
-              {createError}
-            </div>
-          )}
-          <FormActions
-            onCancel={() => { setCreating(false); setCreateState(makeEditState()); setCreateError(null) }}
-            onSubmit={handleCreate}
-            submitting={saving}
-            canSubmit={!!createState.title.trim() && (!createState.collection_id || !!createState.collection_sort_order)}
-            submitLabel="Create Serial"
-            submittingLabel="Creating…"
-            theme={theme}
-          />
+      {/* Two column layout */}
+      <div style={{ display: "flex", gap: 28, alignItems: "flex-start" }}>
+        {/* Left: grid or form */}
+        <div style={{ flexShrink: 0, width: 964 }}>
+          {leftContent}
         </div>
-      )}
 
-      {/* List */}
-      {loading ? (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, color: theme.dim, fontFamily: SPURF, fontSize: 15 }}>
-          <div style={{ width: 18, height: 18, border: `2px solid ${theme.border}`, borderTopColor: theme.accent, borderRadius: "50%", animation: "spur-spin 0.7s linear infinite" }} />
-          Loading…
-        </div>
-      ) : serials.length === 0 && !creating ? (
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 200, gap: 10 }}>
-          <div style={{ fontSize: 36, opacity: 0.1 }}>📖</div>
-          <div style={{ fontSize: 15, color: theme.muted, fontFamily: SPURF }}>No serials yet.</div>
-        </div>
-      ) : (
-        <div>
-          {serials.map(s => {
-            const isEditing = editingId === s.id
-            if (isEditing) {
-              return (
-                <div key={s.id} style={{ background: theme.surface, border: `1px solid ${theme.accent}44`, borderRadius: 10, padding: 24, marginBottom: 12 }}>
-                  <input ref={editCoverRef} type="file" accept="image/*" style={{ display: "none" }}
-                    onChange={e => { const f = e.target.files?.[0]; if (f) uploadCover(f, setEditState); e.target.value = "" }} />
-                  <FormFields state={editState} setState={setEditState} inputRef={editCoverRef} theme={theme} collections={collections} />
-                  {editError && (
-                    <div style={{ marginTop: 16, padding: "10px 14px", background: theme.redDim, border: `1px solid ${theme.red}40`, borderRadius: 7, fontSize: 13, color: theme.red, fontFamily: SPURF }}>
-                      {editError}
+        {/* Right: chapter list */}
+        {activeSerial && (
+          <div style={{ flex: 1, minWidth: 0, maxWidth: 320 }}>
+            {chaptersLoading ? (
+              <div style={{ fontSize: 13, color: theme.dim, fontFamily: SPURF }}>Loading…</div>
+            ) : activeChapters.length === 0 ? (
+              <div style={{ fontSize: 13, color: theme.dim, fontFamily: SPURF }}>No chapters yet.</div>
+            ) : (
+              activeChapters.map((p, i) => {
+                const wc = (p.content ?? "").replace(/<[^>]+>/g, " ").trim().split(/\s+/).filter(Boolean).length
+                return (
+                  <div key={p.id} onClick={() => onOpenPost?.(p)}
+                    style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 8px", borderBottom: `1px solid ${theme.borderLight}`, cursor: "pointer", borderRadius: 6, transition: "background 0.1s" }}
+                    onMouseEnter={e => e.currentTarget.style.background = theme.borderLight}
+                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                    <span style={{ fontSize: 13, color: theme.dim, fontFamily: SPURF, flexShrink: 0, minWidth: 20, textAlign: "right" }}>{i + 1}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 500, color: theme.text, fontFamily: SPURF, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {p.title || "Untitled"}
+                      </div>
+                      <div style={{ fontSize: 12, color: theme.muted, fontFamily: SPURF, marginTop: 2 }}>
+                        {wc.toLocaleString()} words
+                      </div>
                     </div>
-                  )}
-                  <FormActions
-                    onCancel={() => { setEditingId(null); setEditError(null) }}
-                    onSubmit={() => handleSaveEdit(s.id)}
-                    submitting={editSaving}
-                    canSubmit={!!editState.title.trim() && (!editState.collection_id || !!editState.collection_sort_order)}
-                    submitLabel="Save"
-                    submittingLabel="Saving…"
-                    theme={theme}
-                  />
-                </div>
-              )
-            }
-            return (
-              <div key={s.id} style={{ display: "flex", alignItems: "flex-start", gap: 18, padding: "18px 0", borderBottom: `1px solid ${theme.borderLight}` }}>
-                {s.cover_image_url ? (
-                  <img src={s.cover_image_url} alt={s.title}
-                    onClick={() => { setEditingId(s.id); setEditState(makeEditState(s)); setEditError(null) }}
-                    style={{ width: 80, height: "auto", borderRadius: 6, border: `1px solid ${theme.border}`, flexShrink: 0, display: "block", cursor: "pointer" }} />
-                ) : (
-                  <div onClick={() => { setEditingId(s.id); setEditState(makeEditState(s)); setEditError(null) }}
-                    style={{ width: 80, height: 112, borderRadius: 6, border: `1px solid ${theme.border}`, background: theme.borderLight, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-                    <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke={theme.dim} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
-                    </svg>
                   </div>
-                )}
-
-                <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
-                  <div onClick={() => { setEditingId(s.id); setEditState(makeEditState(s)); setEditError(null) }}
-                    style={{ fontSize: 15, fontWeight: 600, color: theme.text, fontFamily: SPURF, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }}>{s.title}</div>
-                  {s.tagline && (
-                    <div style={{ fontSize: 11, color: theme.accent, fontFamily: SPURM, marginTop: 3, fontWeight: 500, letterSpacing: "0.03em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.tagline}</div>
-                  )}
-                  {s.description && (
-                    <div style={{ fontSize: 12, color: theme.muted, fontFamily: SPURF, marginTop: 4, lineHeight: 1.55, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{s.description}</div>
-                  )}
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
-                    <span style={{ fontSize: 12, color: theme.dim, fontFamily: SPURM }}>{s.unit_label}</span>
-                    <StatusBadge status={s.status} theme={theme} />
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", gap: 4, paddingTop: 2, flexShrink: 0 }}>
-                  <button type="button"
-                    onClick={() => { setEditingId(s.id); setEditState(makeEditState(s)); setEditError(null) }}
-                    style={{ background: "none", border: "none", cursor: "pointer", color: theme.dim, padding: "4px 6px", transition: "color 0.1s" }}
-                    onMouseEnter={e => e.currentTarget.style.color = theme.text}
-                    onMouseLeave={e => e.currentTarget.style.color = theme.dim}
-                    title="Edit">
-                    <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
-                      <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                    </svg>
-                  </button>
-
-                  <button type="button" onClick={() => handleDelete(s)} disabled={deletingId === s.id}
-                    style={{ background: "none", border: "none", cursor: "pointer", color: theme.dim, padding: "4px 6px", transition: "color 0.1s", opacity: deletingId === s.id ? 0.4 : 1 }}
-                    onMouseEnter={e => e.currentTarget.style.color = theme.red}
-                    onMouseLeave={e => e.currentTarget.style.color = theme.dim}
-                    title="Delete">
-                    <svg viewBox="0 0 640 640" width={15} height={15} fill="currentColor">
-                      <path d="M232.7 69.9L224 96L128 96C110.3 96 96 110.3 96 128C96 145.7 110.3 160 128 160L512 160C529.7 160 544 145.7 544 128C544 110.3 529.7 96 512 96L416 96L407.3 69.9C402.9 56.8 390.7 48 376.9 48L263.1 48C249.3 48 237.1 56.8 232.7 69.9zM512 208L128 208L149.1 531.1C150.7 556.4 171.7 576 197 576L443 576C468.3 576 489.3 556.4 490.9 531.1L512 208z"/>
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
+                )
+              })
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

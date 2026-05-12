@@ -3,6 +3,7 @@ import type { User } from "@supabase/supabase-js"
 import { supabase } from "./supabase"
 import HolsterNotes from "./HolsterNotes"
 import HolsterCollectionView from "./HolsterCollectionView"
+import HolsterCollectionsView from "./HolsterCollectionsView"
 import HolsterPasswords from "./HolsterPasswords"
 import HolsterKeys from "./HolsterKeys"
 import HolsterLinks from "./HolsterLinks"
@@ -27,6 +28,7 @@ const SB_DIM      = "#6b7280"
 
 export type Category =
   | "all"
+  | "collections"
   | "notes"
   | "files"
   | "passwords"
@@ -113,7 +115,7 @@ export default function HolsterPanel({ user, cryptoKey, onCryptoKeySet }: { user
   const dragStartX     = useRef(0)
   const dragStartWidth = useRef(0)
 
-  const cat = CATEGORIES.find(c => c.id === category)!
+  const cat = CATEGORIES.find(c => c.id === category) ?? { id: "collections" as Category, label: "Collections", icon: COLLECTIONS_ICON }
 
   useEffect(() => {
     if (isMobile) setSidebarOpen(false)
@@ -423,6 +425,15 @@ export default function HolsterPanel({ user, cryptoKey, onCryptoKeySet }: { user
             onNavigateToCategory={cat => {
               setCategory(cat as Category)
               setActiveCollection(null)
+              if (isMobile) setSidebarOpen(false)
+            }}
+          />
+        ) : category === "collections" ? (
+          <HolsterCollectionsView
+            user={user}
+            collections={collections}
+            onOpenCollection={collectionId => {
+              setActiveCollection(collectionId)
               if (isMobile) setSidebarOpen(false)
             }}
           />

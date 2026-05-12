@@ -203,7 +203,7 @@ export function SpurPanel({ site, userId, supabase }: { site: Site; userId: stri
 
   const header = (
     <div style={{ flexShrink: 0, background: theme.bg, borderBottom: `1px solid ${theme.borderLight}`, position: "sticky", top: 0, zIndex: 20, backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }}>
-      <div style={{ display: "flex", alignItems: "center", padding: "0 24px", height: 76, gap: 20 }}>
+      <div style={{ display: "flex", alignItems: "center", padding: "0 24px", height: 76, gap: 20, overflowX: "auto", scrollbarWidth: "none" }}>
         <a href={activeSite ? getSiteUrl(activeSite) : "#"} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", flexShrink: 0 }}>
           <img src="/spur-logo.png" alt="Spur" style={{ height: 52, width: "auto", display: "block" }} />
         </a>
@@ -218,12 +218,12 @@ export function SpurPanel({ site, userId, supabase }: { site: Site; userId: stri
             New Post
           </button>
         )}
-        <nav style={{ display: "flex", alignItems: "center", gap: 4, flex: 1 }}>
+        <nav style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
           {visibleFeatures.map(({ key, label }) => {
             const active = feature === key
             return (
               <button key={key} onClick={() => { setFeature(key as SpurFeature); setEditingPost(null) }}
-                style={{ padding: "9px 14px", border: `1px solid ${active ? theme.border : "transparent"}`, borderRadius: 4, background: active ? theme.borderLight : "transparent", color: active ? theme.text : theme.muted, fontSize: 13, fontWeight: active ? 600 : 500, cursor: "pointer", fontFamily: SPURF, transition: "all 0.12s ease", whiteSpace: "nowrap" }}
+                style={{ padding: "9px 14px", border: `1px solid ${active ? theme.border : "transparent"}`, borderRadius: 4, background: active ? theme.borderLight : "transparent", color: active ? theme.text : theme.muted, fontSize: 13, fontWeight: active ? 600 : 500, cursor: "pointer", fontFamily: SPURF, transition: "all 0.12s ease", whiteSpace: "nowrap", flexShrink: 0 }}
                 onMouseEnter={e => { if (!active) { e.currentTarget.style.color = theme.text; e.currentTarget.style.background = theme.borderLight } }}
                 onMouseLeave={e => { if (!active) { e.currentTarget.style.color = theme.muted; e.currentTarget.style.background = "transparent" } }}>
                 {label}
@@ -240,12 +240,12 @@ export function SpurPanel({ site, userId, supabase }: { site: Site; userId: stri
       </div>
 
       {!editingPost && (
-        <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 24px", height: 52, borderTop: `1px solid ${theme.borderLight}` }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 24px", height: 52, borderTop: `1px solid ${theme.borderLight}`, overflowX: "auto", scrollbarWidth: "none" }}>
           {allSites.map(s => {
             const active = s.id === activeSiteId
             return (
               <button key={s.id} onClick={() => { setActiveSiteId(s.id); setEditingPost(null) }}
-                style={{ padding: "7px 16px", borderRadius: 6, border: `1px solid ${active ? theme.accent + "66" : "transparent"}`, background: active ? theme.accentDim : "transparent", color: active ? theme.accent : theme.muted, fontSize: 14, fontWeight: active ? 700 : 500, cursor: "pointer", fontFamily: SPURF, transition: "all 0.12s ease", whiteSpace: "nowrap" }}
+                style={{ padding: "7px 16px", borderRadius: 6, border: `1px solid ${active ? theme.accent + "66" : "transparent"}`, background: active ? theme.accentDim : "transparent", color: active ? theme.accent : theme.muted, fontSize: 14, fontWeight: active ? 700 : 500, cursor: "pointer", fontFamily: SPURF, transition: "all 0.12s ease", whiteSpace: "nowrap", flexShrink: 0 }}
                 onMouseEnter={e => { if (!active) { e.currentTarget.style.color = theme.text; e.currentTarget.style.background = theme.borderLight } }}
                 onMouseLeave={e => { if (!active) { e.currentTarget.style.color = theme.muted; e.currentTarget.style.background = "transparent" } }}>
                 {s.name}
@@ -265,7 +265,7 @@ export function SpurPanel({ site, userId, supabase }: { site: Site; userId: stri
             const active = filter === f
             return (
               <button key={f} onClick={() => setFilter(f)}
-                style={{ padding: "7px 14px", borderRadius: 6, border: "none", background: active ? theme.accentDim : "transparent", color: active ? theme.accent : theme.muted, fontSize: 14, fontWeight: active ? 700 : 500, fontFamily: SPURF, cursor: "pointer", transition: "all 0.12s ease", display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap" }}
+                style={{ padding: "7px 14px", borderRadius: 6, border: "none", background: active ? theme.accentDim : "transparent", color: active ? theme.accent : theme.muted, fontSize: 14, fontWeight: active ? 700 : 500, fontFamily: SPURF, cursor: "pointer", transition: "all 0.12s ease", display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap", flexShrink: 0 }}
                 onMouseEnter={e => { if (!active) { e.currentTarget.style.color = theme.text; e.currentTarget.style.background = theme.borderLight } }}
                 onMouseLeave={e => { if (!active) { e.currentTarget.style.color = theme.muted; e.currentTarget.style.background = "transparent" } }}>
                 {f === "all" ? "All" : f === "draft" ? "Drafts" : f.charAt(0).toUpperCase() + f.slice(1)}
@@ -355,6 +355,7 @@ export function SpurPanel({ site, userId, supabase }: { site: Site; userId: stri
           loading={serialsLoading}
           onChanged={loadSerials}
           collections={collections}
+          onOpenPost={(post) => { setFeature("posts"); setEditingPost(post) }}
         />
       )
     }

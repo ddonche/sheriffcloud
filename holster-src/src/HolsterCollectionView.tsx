@@ -810,11 +810,12 @@ export default function HolsterCollectionView({ user, collection, collections, c
         user={user}
         collections={collections}
         onSave={saved => {
-          setItemsByType(prev => {
-            const type: ItemType = editing.type === "note" ? "notes" : "snippets"
-            return { ...prev, [type]: (prev[type] ?? []).map(i => i.id === saved.id ? { ...saved, _type: type } : i) }
-          })
-          setEditing(null)
+          const type: ItemType = editing.type === "note" ? "notes" : "snippets"
+          setItemsByType(prev => ({
+            ...prev,
+            [type]: (prev[type] ?? []).map(i => i.id === saved.id ? { ...saved, _type: type } : i),
+          }))
+          setEditing({ item: saved, type: editing.type })
         }}
         onDelete={id => {
           setItemsByType(prev => {

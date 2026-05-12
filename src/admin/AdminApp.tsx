@@ -7,6 +7,7 @@ import AccountPanel from "./components/AccountPanel"
 import SiteSettingsPanel from "./components/SiteSettingsPanel"
 import { CodexPanel } from "./codex/CodexPanel"
 import { DocsPanel } from "./docs/DocsPanel"
+import LexiconPanel from "./lexicon/LexiconPanel"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -79,6 +80,7 @@ type NavSelection =
   | { kind: "usage" }
   | { kind: "chatterbox" }
   | { kind: "holster" }
+  | { kind: "lexicon" }
   | { kind: "codex" }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -385,6 +387,7 @@ function Sidebar({ ownedSites, sharedSpurSites, profile, plan, selection, onSele
             <div style={{ padding: "16px 16px 8px", fontSize: 11, fontWeight: 700, color: SB.textDim, letterSpacing: "0.08em", textTransform: "uppercase" }}>Tools</div>
             {sidebarNavItem("chatterbox", "Chatterbox")}
             {sidebarNavItem("holster", "Holster")}
+            {sidebarNavItem("lexicon", "Lexicon")}
             {sidebarNavItem("codex", "Codex")}
           </div>
 
@@ -701,6 +704,7 @@ export default function App() {
     if (selection.kind === "usage") return <StubView title="Usage" />
     if (selection.kind === "chatterbox") return <StubView title="Chatterbox" />
     if (selection.kind === "holster") return <StubView title="Holster" />
+    if (selection.kind === "lexicon") return <LexiconPanel />
     if (selection.kind === "codex") {
       const defaultSite = ownedSites[0] ?? null
       return defaultSite ? <CodexPanel userId={session.user.id} siteId={defaultSite.id} supabase={supabase} /> : <StubView title="Codex" />
