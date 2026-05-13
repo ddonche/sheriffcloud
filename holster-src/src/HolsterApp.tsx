@@ -3,6 +3,7 @@ import { type User } from "@supabase/supabase-js"
 import { supabase } from "./supabase"
 import HolsterPanel from "./HolsterPanel"
 import { AuthModal } from "./AuthModal"
+import HolsterLandingPage from "./HolsterLandingPage"
 
 const FONT   = `"Inter", system-ui, -apple-system, sans-serif`
 const SHELL  = "#1a2730"
@@ -138,10 +139,16 @@ function StorageBar({ used, total }: { used: number; total: number }) {
   )
 }
 
+function getPublicPage(): "home" | "pricing" {
+  return window.location.pathname === "/pricing" ? "pricing" : "home"
+}
+
 export default function HolsterApp() {
   const [user, setUser]           = useState<User | null>(null)
   const [loading, setLoading]     = useState(true)
   const [cryptoKey, setCryptoKey] = useState<CryptoKey | null>(null)
+  const [showAuth, setShowAuth]   = useState(false)
+  const [publicPage, setPublicPage] = useState<"home" | "pricing">(getPublicPage)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -151,9 +158,22 @@ export default function HolsterApp() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
       setLoading(false)
+      if (session?.user) setShowAuth(false)
     })
     return () => subscription.unsubscribe()
   }, [])
+
+  useEffect(() => {
+    const onPopState = () => setPublicPage(getPublicPage())
+    window.addEventListener("popstate", onPopState)
+    return () => window.removeEventListener("popstate", onPopState)
+  }, [])
+
+  function navigatePublic(page: "home" | "pricing") {
+    const path = page === "pricing" ? "/pricing" : "/"
+    window.history.pushState({}, "", path)
+    setPublicPage(page)
+  }
 
   async function handleSignOut() {
     await supabase.auth.signOut()
@@ -169,7 +189,19 @@ export default function HolsterApp() {
   }
 
   if (!user) {
-    return <AuthModal onAuth={setUser} />
+    return (
+      <>
+        <style>{GLOBAL_STYLES}</style>
+        <HolsterLandingPage
+          page={publicPage}
+          onHome={() => navigatePublic("home")}
+          onPricing={() => navigatePublic("pricing")}
+          onSignIn={() => setShowAuth(true)}
+          onGetStarted={() => setShowAuth(true)}
+        />
+        {showAuth && <AuthModal onAuth={setUser} />}
+      </>
+    )
   }
 
   return (
