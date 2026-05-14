@@ -153,58 +153,128 @@ function Landing({ onPricing, onGetStarted }: Pick<Props, "onPricing" | "onGetSt
         maxWidth: 1180, margin: "0 auto", padding: "16px 24px 64px",
         display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 16,
       }}>
-        <FeatureCard title="Project collections" text="Put notes, lists, keys, passwords, files, snippets, and links under the same project instead of scattering them across five apps." />
-        <FeatureCard title="Built for daily use" text="Fast capture, simple organization, and no device-limit nonsense. Open the vault, grab what you need, keep moving." />
-        <FeatureCard title="Creator operating system" text="Use Holster as the memory layer behind Sheriff Cloud, Spur, Chatterbox, writing projects, code projects, and research." />
+        <FeatureCard title="One vault for the scattered stuff" text="Notes, lists, keys, passwords, files, snippets, and links live together instead of being scattered across five apps." />
+        <FeatureCard title="No device-limit nonsense" text="Holster is web-first. Sign in from your laptop, desktop, tablet, or phone and keep your operational memory within reach." />
+        <FeatureCard title="Built for projects and daily use" text="Use collections to group research, writing, code projects, business ops, credentials, checklists, and reference material." />
       </section>
     </>
   )
 }
 
-function Pricing({ onGetStarted }: Pick<Props, "onGetStarted">) {
+function PlanCard({
+  name,
+  description,
+  price,
+  priceSuffix,
+  features,
+  highlighted,
+  button,
+  onGetStarted,
+}: {
+  name: string
+  description: string
+  price: string
+  priceSuffix?: string
+  features: string[]
+  highlighted?: boolean
+  button: string
+  onGetStarted: () => void
+}) {
   return (
-    <section style={{ maxWidth: 1020, margin: "0 auto", padding: "70px 24px 76px", display: "grid", gap: 28 }}>
+    <div style={{
+      background: CARD,
+      border: highlighted ? `1px solid ${TEAL}66` : `1px solid ${BORDER}`,
+      borderRadius: 18,
+      padding: 24,
+      display: "grid",
+      gap: 18,
+      boxShadow: highlighted ? "0 20px 55px rgba(91,149,167,0.12)" : "none",
+    }}>
+      <div>
+        <div style={{ color: TEXT, fontSize: 24, fontWeight: 900, fontFamily: FONT }}>{name}</div>
+        <div style={{ color: DIM, marginTop: 6, fontSize: 14, lineHeight: 1.5, fontFamily: FONT }}>{description}</div>
+      </div>
+
+      <div style={{ color: TEXT, fontSize: 42, fontWeight: 950, fontFamily: FONT }}>
+        {price}
+        {priceSuffix && <span style={{ fontSize: 15, color: DIM, fontWeight: 700 }}> {priceSuffix}</span>}
+      </div>
+
+      <ul style={{ margin: 0, paddingLeft: 20, color: MUTED, lineHeight: 1.9, fontSize: 14, fontFamily: FONT }}>
+        {features.map(feature => (
+          <li key={feature}>{feature}</li>
+        ))}
+      </ul>
+
+      {highlighted ? (
+        <PrimaryButton onClick={onGetStarted}>{button}</PrimaryButton>
+      ) : (
+        <SecondaryButton onClick={onGetStarted}>{button}</SecondaryButton>
+      )}
+    </div>
+  )
+}
+
+export function Pricing({ onGetStarted }: Pick<Props, "onGetStarted">) {
+  return (
+    <section style={{ maxWidth: 1180, margin: "0 auto", padding: "70px 24px 76px", display: "grid", gap: 28 }}>
       <div style={{ display: "grid", gap: 10, textAlign: "center" }}>
         <h1 style={{ margin: 0, color: TEXT, fontSize: 48, letterSpacing: "-0.045em", fontWeight: 950, fontFamily: FONT }}>
           Simple pricing.
         </h1>
-        <p style={{ margin: "0 auto", color: MUTED, fontSize: 17, lineHeight: 1.6, maxWidth: 620, fontFamily: FONT }}>
-          Start free. Upgrade when Holster becomes part of your daily kit.
+        <p style={{ margin: "0 auto", color: MUTED, fontSize: 17, lineHeight: 1.6, maxWidth: 680, fontFamily: FONT }}>
+          Start free. Upgrade when Holster becomes part of your daily kit. Go Ultra when files, media, and video become part of the workflow.
         </p>
       </div>
 
-      <div className="hol-public-grid-2" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 18 }}>
-        <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 18, padding: 24, display: "grid", gap: 18 }}>
-          <div>
-            <div style={{ color: TEXT, fontSize: 24, fontWeight: 900, fontFamily: FONT }}>Free</div>
-            <div style={{ color: DIM, marginTop: 6, fontSize: 14, fontFamily: FONT }}>For trying Holster and keeping a small personal vault.</div>
-          </div>
-          <div style={{ color: TEXT, fontSize: 42, fontWeight: 950, fontFamily: FONT }}>$0</div>
-          <ul style={{ margin: 0, paddingLeft: 20, color: MUTED, lineHeight: 1.9, fontSize: 14, fontFamily: FONT }}>
-            <li>Notes, lists, snippets, links</li>
-            <li>Passwords and API keys</li>
-            <li>Collections</li>
-            <li>Basic storage</li>
-          </ul>
-          <SecondaryButton onClick={onGetStarted}>Start free</SecondaryButton>
-        </div>
+      <div className="hol-public-grid-3" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 18 }}>
+        <PlanCard
+          name="Free"
+          description="For trying Holster and keeping a personal vault."
+          price="$0"
+          features={[
+            "Unlimited notes, lists, snippets, links, passwords, and API keys",
+            "20 collections",
+            "250 MB storage",
+            "10 MB max file uploads",
+            "Unlimited devices",
+          ]}
+          button="Start free"
+          onGetStarted={onGetStarted}
+        />
 
-        <div style={{ background: CARD, border: `1px solid ${TEAL}66`, borderRadius: 18, padding: 24, display: "grid", gap: 18, boxShadow: "0 20px 55px rgba(91,149,167,0.12)" }}>
-          <div>
-            <div style={{ color: TEXT, fontSize: 24, fontWeight: 900, fontFamily: FONT }}>Pro</div>
-            <div style={{ color: DIM, marginTop: 6, fontSize: 14, fontFamily: FONT }}>For people who use Holster as their daily operational memory.</div>
-          </div>
-          <div style={{ color: TEXT, fontSize: 42, fontWeight: 950, fontFamily: FONT }}>
-            TBD<span style={{ fontSize: 15, color: DIM, fontWeight: 700 }}> / month</span>
-          </div>
-          <ul style={{ margin: 0, paddingLeft: 20, color: MUTED, lineHeight: 1.9, fontSize: 14, fontFamily: FONT }}>
-            <li>More storage</li>
-            <li>Bigger uploads</li>
-            <li>Future premium tools</li>
-            <li>Priority feature feedback</li>
-          </ul>
-          <PrimaryButton onClick={onGetStarted}>Get started</PrimaryButton>
-        </div>
+        <PlanCard
+          name="Pro"
+          description="For people who use Holster as their daily operational memory."
+          price="TBD"
+          priceSuffix="/ month"
+          highlighted
+          features={[
+            "Unlimited collections",
+            "5 GB storage",
+            "100 MB max file uploads",
+            "Unlimited devices",
+            "Keep existing data if you downgrade",
+          ]}
+          button="Get Pro"
+          onGetStarted={onGetStarted}
+        />
+
+        <PlanCard
+          name="Ultra"
+          description="For heavier file storage, production assets, audio, and video."
+          price="TBD"
+          priceSuffix="/ month"
+          features={[
+            "Unlimited collections",
+            "50 GB storage",
+            "5 GB max file uploads",
+            "Built for larger media files",
+            "Keep existing data if you downgrade",
+          ]}
+          button="Go Ultra"
+          onGetStarted={onGetStarted}
+        />
       </div>
     </section>
   )
@@ -214,6 +284,10 @@ export default function HolsterLandingPage({ page, onHome, onPricing, onSignIn, 
   return (
     <div style={{ minHeight: "100vh", background: SHELL, color: TEXT, display: "flex", flexDirection: "column" }}>
       <style>{`
+        @media (max-width: 980px) {
+          .hol-public-grid-3 { grid-template-columns: 1fr !important; }
+        }
+
         @media (max-width: 860px) {
           .hol-public-hero { grid-template-columns: 1fr !important; padding-top: 46px !important; }
           .hol-public-grid { grid-template-columns: 1fr !important; }

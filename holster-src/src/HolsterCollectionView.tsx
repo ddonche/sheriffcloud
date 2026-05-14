@@ -1,5 +1,5 @@
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import React, { useEffect, useMemo, useRef, useState } from "react"
 import { supabase } from "./supabase"
 import type { User } from "@supabase/supabase-js"
 import type { HolsterCollection } from "./HolsterPanel"
@@ -30,6 +30,9 @@ type RawItem = {
   username?: string
   tag?: string
   notes?: string
+  mime_type?: string | null
+  size_bytes?: number | null
+  file_path?: string | null
   collection: string | null
   created_at: string
   updated_at: string
@@ -337,6 +340,255 @@ function EncryptedCard({ item, cryptoKey }: { item: RawItem; cryptoKey: CryptoKe
   )
 }
 
+const BUCKET = "holster-files"
+
+function formatBytes(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B"
+  const units = ["B", "KB", "MB", "GB"]
+  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
+  return `${(bytes / Math.pow(1024, index)).toFixed(index === 0 ? 0 : 1)} ${units[index]}`
+}
+
+function fileTypeLabel(mime?: string | null) {
+  if (!mime) return "FILE"
+  if (mime === "application/pdf") return "PDF"
+  if (mime.includes("word") || mime.includes("document")) return "DOC"
+  if (mime.includes("spreadsheet") || mime.includes("excel")) return "XLS"
+  if (mime.includes("presentation") || mime.includes("powerpoint")) return "PPT"
+  if (mime.startsWith("text/")) return "TXT"
+  if (mime.startsWith("image/")) return "IMG"
+  if (mime.startsWith("audio/")) {
+    if (mime.includes("mp3") || mime.includes("mpeg")) return "MP3"
+    if (mime.includes("wav")) return "WAV"
+    if (mime.includes("ogg")) return "OGG"
+    return "AUDIO"
+  }
+  if (mime.startsWith("video/")) {
+    if (mime.includes("mp4")) return "MP4"
+    if (mime.includes("webm")) return "WEBM"
+    return "VIDEO"
+  }
+  return "FILE"
+}
+
+const FILE_COLOR = TYPE_CONFIG.files.color
+
+function FileCard({ item }: { item: RawItem }) {
+  const [signedUrl, setSignedUrl] = useState<string | null>(null)
+  const [loadingUrl, setLoadingUrl] = useState(false)
+  const [lightbox, setLightbox] = useState(false)
+  const [playing, setPlaying] = useState(false)
+  const audioRef = React.useRef<HTMLAudioElement | null>(null)
+  const mime = item.mime_type
+  const isImg = !!mime?.startsWith("image/")
+  const isAudio = !!mime?.startsWith("audio/")
+  const isVideo = !!mime?.startsWith("video/")
+  const label = fileTypeLabel(mime)
+
+  useEffect(() => {
+    if (!item.file_path) return
+    void supabase.storage.from(BUCKET).createSignedUrl(item.file_path, 60 * 10).then(({ data }) => {
+      if (data?.signedUrl) setSignedUrl(data.signedUrl)
+    })
+  }, [item.file_path])
+
+  async function getUrl(): Promise<string | null> {
+    if (signedUrl) return signedUrl
+    if (!item.file_path) return null
+    setLoadingUrl(true)
+    const { data } = await supabase.storage.from(BUCKET).createSignedUrl(item.file_path, 60 * 10)
+    setLoadingUrl(false)
+    if (data?.signedUrl) {
+      setSignedUrl(data.signedUrl)
+      return data.signedUrl
+    }
+    return null
+  }
+
+  function handlePlayPause(e: React.MouseEvent) {
+    e.stopPropagation()
+    const audio = audioRef.current
+    if (!audio) return
+    if (playing) {
+      audio.pause()
+      setPlaying(false)
+    } else {
+      audio.play().catch(() => {})
+      setPlaying(true)
+    }
+  }
+
+  async function handleClick() {
+    if (isAudio || isVideo) return // handled inline
+    if (isImg) {
+      await getUrl()
+      setLightbox(true)
+      return
+    }
+    const url = await getUrl()
+    if (url) window.open(url, "_blank", "noopener,noreferrer")
+  }
+
+  return (
+    <>
+      <div
+        style={{
+          width: 180,
+          flexShrink: 0,
+          background: CARD_BG,
+          border: `1px solid ${CONTENT_BDR}`,
+          borderRadius: 12,
+          overflow: "hidden",
+          display: "flex",
+          flexDirection: "column",
+          boxShadow: "0 1px 2px rgba(15,23,42,0.04)",
+          cursor: isAudio || isVideo ? "default" : "pointer",
+        }}
+        onClick={isAudio || isVideo ? undefined : () => void handleClick()}
+      >
+        {/* Thumbnail */}
+        <div style={{
+          height: 110,
+          background: isImg && signedUrl ? "#f1f5f9" : `${FILE_COLOR}10`,
+          display: "grid",
+          placeItems: "center",
+          color: FILE_COLOR,
+          flexShrink: 0,
+          overflow: "hidden",
+          position: "relative",
+        }}>
+          {isImg && signedUrl ? (
+            <img
+              src={signedUrl}
+              alt={item.title}
+              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+            />
+          ) : isVideo && signedUrl ? (
+            <video
+              src={signedUrl}
+              controls
+              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", background: "#000" }}
+              onClick={e => e.stopPropagation()}
+            />
+          ) : isAudio ? (
+            <>
+              {signedUrl && (
+                <audio
+                  ref={audioRef}
+                  src={signedUrl}
+                  onEnded={() => setPlaying(false)}
+                  style={{ display: "none" }}
+                />
+              )}
+              <div style={{ display: "grid", gap: 6, justifyItems: "center" }}>
+                <svg viewBox="0 0 24 24" width={28} height={28} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
+                </svg>
+                <span style={{ fontSize: 11, fontWeight: 900, color: FILE_COLOR, letterSpacing: 0.5, fontFamily: FONT }}>{label}</span>
+              </div>
+              {/* Play/pause overlay */}
+              {signedUrl && (
+                <div
+                  onClick={handlePlayPause}
+                  style={{
+                    position: "absolute", bottom: 8, left: 8,
+                    width: 36, height: 36, borderRadius: "50%",
+                    background: FILE_COLOR,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    cursor: "pointer",
+                    boxShadow: `0 2px 8px ${FILE_COLOR}66`,
+                    opacity: playing ? 1 : 0.88,
+                    transform: playing ? "scale(1.08)" : "scale(1)",
+                    transition: "opacity 0.15s, transform 0.15s",
+                  }}
+                >
+                  {playing ? (
+                    <svg viewBox="0 0 24 24" width={16} height={16} fill="#fff">
+                      <rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" />
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" width={16} height={16} fill="#fff">
+                      <polygon points="5,3 19,12 5,21" />
+                    </svg>
+                  )}
+                </div>
+              )}
+            </>
+          ) : (
+            <div style={{ display: "grid", gap: 6, justifyItems: "center" }}>
+              {isVideo && !signedUrl ? (
+                <svg viewBox="0 0 24 24" width={32} height={32} fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="23 7 16 12 23 17 23 7" /><rect x="1" y="5" width="15" height="14" rx="2" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 640 640" width={32} height={32} fill="currentColor">
+                  <path d="M192 64C156.7 64 128 92.7 128 128L128 512C128 547.3 156.7 576 192 576L448 576C483.3 576 512 547.3 512 512L512 234.5C512 217.5 505.3 201.2 493.3 189.2L386.7 82.7C374.7 70.7 358.5 64 341.5 64L192 64zM453.5 240L360 240C346.7 240 336 229.3 336 216L336 122.5L453.5 240z" />
+                </svg>
+              )}
+              <span style={{ fontSize: 11, fontWeight: 900, color: FILE_COLOR, letterSpacing: 0.5, fontFamily: FONT }}>
+                {loadingUrl ? "…" : label}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Info */}
+        <div style={{ padding: "10px 12px", display: "grid", gap: 4 }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: TEXT, fontFamily: FONT, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {item.title || "Untitled"}
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {item.size_bytes != null && (
+              <span style={{ fontSize: 11, color: DIM, fontWeight: 700, fontFamily: FONT }}>
+                {formatBytes(item.size_bytes)}
+              </span>
+            )}
+            <span style={{ fontSize: 11, color: DIM, fontFamily: FONT, marginLeft: "auto" }}>
+              {timeAgo(item.updated_at)}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Image lightbox */}
+      {lightbox && signedUrl && (
+        <div
+          onClick={() => setLightbox(false)}
+          style={{
+            position: "fixed", inset: 0, zIndex: 9999,
+            background: "rgba(15,23,42,0.85)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: 24, boxSizing: "border-box",
+          }}
+        >
+          <button
+            type="button"
+            onClick={e => { e.stopPropagation(); setLightbox(false) }}
+            style={{
+              position: "fixed", top: 18, right: 18,
+              width: 38, height: 38, borderRadius: 999,
+              border: "1px solid rgba(255,255,255,0.35)",
+              background: "rgba(15,23,42,0.75)",
+              color: "#fff", fontSize: 22, lineHeight: "34px",
+              fontWeight: 800, cursor: "pointer",
+            }}
+          >×</button>
+          <img
+            src={signedUrl}
+            alt={item.title}
+            onClick={e => e.stopPropagation()}
+            style={{
+              maxWidth: "92vw", maxHeight: "88vh",
+              objectFit: "contain", borderRadius: 14,
+              background: "#fff", boxShadow: "0 24px 80px rgba(0,0,0,0.35)",
+            }}
+          />
+        </div>
+      )}
+    </>
+  )
+}
+
 function CarouselRow({ type, items, cryptoKey, onRequestUnlock, onNoteClick }: {
   type: ItemType
   items: RawItem[]
@@ -393,6 +645,7 @@ function CarouselRow({ type, items, cryptoKey, onRequestUnlock, onNoteClick }: {
         ) : items.map(item => {
           if (type === "links") return <LinkRow key={item.id} item={item} />
           if (encrypted && cryptoKey) return <EncryptedCard key={item.id} item={item} cryptoKey={cryptoKey} />
+          if (type === "files") return <FileCard key={item.id} item={item} />
           if (type === "snippets") return <SnippetCard key={item.id} item={item} onClick={() => onNoteClick(item)} />
           return <NoteCard key={item.id} item={item} onClick={() => onNoteClick(item)} />
         })}
@@ -531,7 +784,7 @@ export default function HolsterCollectionView({ user, collection, collections, c
   const SELECT: Record<ItemType, string> = {
     notes:     "id, title, content, collection, created_at, updated_at",
     snippets:  "id, title, content, collection, created_at, updated_at",
-    files:     "id, title, collection, created_at, updated_at",
+    files:     "id, title, mime_type, size_bytes, file_path, collection, created_at, updated_at",
     links:     "id, title, url, collection, created_at, updated_at",
     passwords: "id, title, username, password, collection, created_at, updated_at",
     keys:      "id, title, value, tag, collection, created_at, updated_at",

@@ -2,7 +2,8 @@ import { useEffect, useState } from "react"
 import { supabase } from "./supabase"
 import type { User } from "@supabase/supabase-js"
 import type { HolsterCollection } from "./HolsterPanel"
-import { timeAgo, CollectionPicker } from "./HolsterNotes"
+import { timeAgo } from "./HolsterNotes"
+import { CollectionPicker } from "./HolsterCollectionPicker"
 import { deriveKey, makeVerifier, checkVerifier, encrypt, decrypt } from "./holsterCrypto"
 
 const FONT        = `"Inter", system-ui, -apple-system, sans-serif`

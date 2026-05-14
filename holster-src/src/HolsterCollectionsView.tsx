@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { supabase } from "./supabase"
 import type { User } from "@supabase/supabase-js"
 import type { HolsterCollection } from "./HolsterPanel"
+import { CollectionPicker } from "./HolsterCollectionPicker"
 
 const FONT        = `"Inter", system-ui, -apple-system, sans-serif`
 const CONTENT_BG  = "#f8fafc"
@@ -58,15 +59,18 @@ export default function HolsterCollectionsView({
   user,
   collections,
   onOpenCollection,
+  onCollectionCreated,
 }: {
   user: User
   collections: HolsterCollection[]
   onOpenCollection: (collectionId: string) => void
+  onCollectionCreated: (col: HolsterCollection) => void
 }) {
   const isMobile = useIsMobile()
   const [counts, setCounts] = useState<CountMap>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [selectedCollection, setSelectedCollection] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -97,7 +101,7 @@ export default function HolsterCollectionsView({
     void loadCounts()
 
     return () => { cancelled = true }
-  }, [user.id])
+  }, [user.id, collections.length])
 
   const sortedCollections = useMemo(
     () => [...collections].sort((a, b) => a.name.localeCompare(b.name)),
@@ -132,6 +136,22 @@ export default function HolsterCollectionsView({
             {error}
           </div>
         )}
+
+        <div style={{ background: CARD_BG, border: `1px solid ${CONTENT_BDR}`, borderRadius: 16, padding: 16, marginBottom: 16 }}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: TEXT, fontFamily: FONT, marginBottom: 10 }}>
+            Create collection
+          </div>
+
+          <CollectionPicker
+            collections={collections}
+            value={selectedCollection}
+            onChange={setSelectedCollection}
+            onCreateNew={(col) => {
+              onCollectionCreated(col)
+              setSelectedCollection(col.id)
+            }}
+          />
+        </div>
 
         {sortedCollections.length === 0 ? (
           <div style={{ background: CARD_BG, border: `1px solid ${CONTENT_BDR}`, borderRadius: 16, padding: 24, fontSize: 14, color: DIM, fontFamily: FONT }}>

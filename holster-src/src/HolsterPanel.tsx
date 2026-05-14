@@ -9,6 +9,7 @@ import HolsterKeys from "./HolsterKeys"
 import HolsterLinks from "./HolsterLinks"
 import HolsterLists from "./HolsterLists"
 import HolsterAllView from "./HolsterAllView"
+import HolsterFiles from "./HolsterFiles"
 
 const FONT        = `"Inter", system-ui, -apple-system, sans-serif`
 const SHELL       = "#1a2730"
@@ -98,7 +99,7 @@ function PlaceholderView({ title }: { title: string }) {
   )
 }
 
-export default function HolsterPanel({ user, cryptoKey, onCryptoKeySet }: { user: User; cryptoKey: CryptoKey | null; onCryptoKeySet: (key: CryptoKey) => void }) {
+export default function HolsterPanel({ user, cryptoKey, onCryptoKeySet, onStorageChanged }: { user: User; cryptoKey: CryptoKey | null; onCryptoKeySet: (key: CryptoKey) => void; onStorageChanged?: () => void }) {
   const isMobile = useIsMobile()
 
   const [sidebarOpen, setSidebarOpen]   = useState(!isMobile)
@@ -432,6 +433,7 @@ export default function HolsterPanel({ user, cryptoKey, onCryptoKeySet }: { user
           <HolsterCollectionsView
             user={user}
             collections={collections}
+            onCollectionCreated={handleCollectionCreated}
             onOpenCollection={collectionId => {
               setActiveCollection(collectionId)
               if (isMobile) setSidebarOpen(false)
@@ -468,6 +470,13 @@ export default function HolsterPanel({ user, cryptoKey, onCryptoKeySet }: { user
             onCollectionCreated={handleCollectionCreated}
             cryptoKey={cryptoKey}
             onCryptoKeySet={onCryptoKeySet}
+          />
+        ) : category === "files" ? (
+          <HolsterFiles
+            user={user}
+            collections={collections}
+            onCollectionCreated={handleCollectionCreated}
+            onStorageChanged={onStorageChanged}
           />
         ) : category === "links" ? (
           <HolsterLinks

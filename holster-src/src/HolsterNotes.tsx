@@ -5,6 +5,7 @@ import { supabase } from "./supabase"
 import type { User } from "@supabase/supabase-js"
 import type { HolsterCollection } from "./HolsterPanel"
 import LinkPicker, { type LinkableItem, type LinkItemType } from "./components/LinkPicker"
+import { CollectionPicker } from "./HolsterCollectionPicker"
 
 const FONT        = `"Inter", system-ui, -apple-system, sans-serif`
 const CONTENT_BG  = "#f8fafc"
@@ -143,86 +144,6 @@ export function Toolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
       <ToolbarBtn title="Redo" onClick={() => editor.chain().focus().redo().run()}>
         <svg viewBox="0 0 640 640" width={20} height={20} fill="currentColor"><path d="M544 384C544 280.8 460.8 192 352 192L231.4 192C180.6 192 137.4 227.7 128 277.8L128 278.4C125.1 293.5 110.4 303.5 95.3 300.7C80.2 297.8 70.2 283.1 73 268L73 267.4C86.6 194.4 150.6 144 231.4 144L352 144C487.1 144 592 249.2 592 384L592 416L624 416C634.9 416 643.8 423.4 645.3 432.2C646.7 441 640.1 449.5 631.5 453.7L503.5 519.7C496.5 523.3 488 521.8 482.8 516.5L386.8 420.5C380.9 414.6 380.2 405.2 385.2 398.5C390.1 391.8 399.3 389.7 406.7 393.6L480 432L480 384L544 384z"/></svg>
       </ToolbarBtn>
-    </div>
-  )
-}
-
-// ── Collection picker ─────────────────────────────────────────────────────────
-
-import { ColorPicker, PRESET_COLORS, DEFAULT_COLOR } from "./HolsterColorPicker"
-
-export function CollectionPicker({ collections, value, onChange, onCreateNew }: {
-  collections: HolsterCollection[]
-  value: string | null
-  onChange: (id: string | null) => void
-  onCreateNew: (col: HolsterCollection) => void
-}) {
-  const [creating, setCreating]   = useState(false)
-  const [newName, setNewName]     = useState("")
-  const [newColor, setNewColor]   = useState<string>(DEFAULT_COLOR)
-  const [saving, setSaving]       = useState(false)
-
-  async function handleCreate() {
-    const name = newName.trim()
-    if (!name) return
-    setSaving(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    const { data, error } = await supabase
-      .from("holster_collections")
-      .insert({ name, color: newColor, user_id: user?.id })
-      .select().single()
-    setSaving(false)
-    if (error || !data) return
-    onCreateNew(data)
-    onChange(data.id)
-    setCreating(false)
-    setNewName("")
-    setNewColor(PRESET_COLORS[0].color)
-  }
-
-  const selectedCol = collections.find(c => c.id === value)
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        {/* Custom select-like button showing color dot */}
-        <div style={{ position: "relative" }}>
-          <select value={value ?? ""} onChange={e => onChange(e.target.value || null)}
-            style={{ height: 34, padding: "0 10px 0 28px", borderRadius: 7, border: `1px solid ${CONTENT_BDR}`, background: CARD_BG, fontSize: 13, fontFamily: FONT, color: TEXT, outline: "none", appearance: "auto" }}>
-            <option value="">No collection</option>
-            {collections.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-          {selectedCol?.color && (
-            <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", width: 8, height: 8, borderRadius: "50%", background: selectedCol.color, pointerEvents: "none" }} />
-          )}
-        </div>
-        {!creating && (
-          <button onClick={() => setCreating(true)}
-            style={{ height: 34, padding: "0 10px", borderRadius: 7, border: `1px solid ${CONTENT_BDR}`, background: "transparent", fontSize: 13, fontFamily: FONT, color: MUTED, cursor: "pointer" }}>
-            + New
-          </button>
-        )}
-      </div>
-
-      {creating && (
-        <div style={{ display: "grid", gap: 10, padding: "12px 14px", background: `${TEAL}08`, border: `1px solid ${TEAL}33`, borderRadius: 8 }}>
-          <input autoFocus value={newName} onChange={e => setNewName(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter") handleCreate(); if (e.key === "Escape") setCreating(false) }}
-            placeholder="Collection name"
-            style={{ height: 34, padding: "0 10px", borderRadius: 7, border: `1px solid ${CONTENT_BDR}`, background: CARD_BG, fontSize: 13, fontFamily: FONT, color: TEXT, outline: "none" }} />
-          <ColorPicker value={newColor} onChange={setNewColor} />
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={handleCreate} disabled={saving}
-              style={{ height: 30, padding: "0 12px", borderRadius: 7, border: "none", background: TEAL, fontSize: 13, fontFamily: FONT, color: "#fff", cursor: "pointer", opacity: saving ? 0.7 : 1 }}>
-              {saving ? "…" : "Create"}
-            </button>
-            <button onClick={() => setCreating(false)}
-              style={{ height: 30, padding: "0 10px", borderRadius: 7, border: `1px solid ${CONTENT_BDR}`, background: "transparent", fontSize: 13, fontFamily: FONT, color: MUTED, cursor: "pointer" }}>
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

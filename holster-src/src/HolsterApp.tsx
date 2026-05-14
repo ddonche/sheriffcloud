@@ -3,7 +3,8 @@ import { type User } from "@supabase/supabase-js"
 import { supabase } from "./supabase"
 import HolsterPanel from "./HolsterPanel"
 import { AuthModal } from "./AuthModal"
-import HolsterLandingPage from "./HolsterLandingPage"
+import HolsterLandingPage, { Pricing } from "./HolsterLandingPage"
+import { getHolsterEntitlements } from "./getHolsterEntitlements"
 
 const FONT   = `"Inter", system-ui, -apple-system, sans-serif`
 const SHELL  = "#1a2730"
@@ -67,8 +68,29 @@ const GLOBAL_STYLES = `
   }
 `
 
-function Header({ user, onSignOut }: { user: User; onSignOut: () => void }) {
+function Header({
+  user,
+  onHome,
+  onPricing,
+  onSignOut,
+}: {
+  user: User
+  onHome: () => void
+  onPricing: () => void
+  onSignOut: () => void
+}) {
   const [hover, setHover] = useState(false)
+
+  const navButton: React.CSSProperties = {
+    border: "none",
+    background: "transparent",
+    color: MUTED,
+    fontSize: 14,
+    fontWeight: 700,
+    fontFamily: FONT,
+    cursor: "pointer",
+    padding: "8px 10px",
+  }
 
   return (
     <header style={{
@@ -76,21 +98,51 @@ function Header({ user, onSignOut }: { user: User; onSignOut: () => void }) {
       display: "flex", alignItems: "center", justifyContent: "space-between",
       padding: "0 24px", flexShrink: 0, zIndex: 10,
     }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+      <button
+        type="button"
+        onClick={onHome}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 14,
+          background: "transparent",
+          border: "none",
+          cursor: "pointer",
+          padding: 0,
+        }}
+      >
         <img src="/logo.png" alt="Holster" style={{ height: 52, width: "auto", display: "block" }} />
         <span style={{ fontSize: 28, fontWeight: 800, color: TEXT, fontFamily: FONT, letterSpacing: "-0.02em" }}>
           Holster
         </span>
-      </div>
+      </button>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <div style={{
-          padding: "8px 14px", background: `${TEAL}18`,
-          border: `1px solid ${TEAL}44`, borderRadius: 8,
-          color: MUTED, fontSize: 13, fontWeight: 600, fontFamily: FONT,
-          display: "flex",
-        }}
-          className="hol-user-email">
+        <nav className="hol-logged-nav-links" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+
+          <button type="button" onClick={onPricing} style={navButton}>
+            Pricing
+          </button>
+
+          <a href="/docs" style={{ ...navButton, textDecoration: "none" }}>
+            Docs
+          </a>
+        </nav>
+
+        <div
+          style={{
+            padding: "8px 14px",
+            background: `${TEAL}18`,
+            border: `1px solid ${TEAL}44`,
+            borderRadius: 8,
+            color: MUTED,
+            fontSize: 13,
+            fontWeight: 600,
+            fontFamily: FONT,
+            display: "flex",
+          }}
+          className="hol-user-email"
+        >
           {user.email}
         </div>
 
@@ -117,8 +169,22 @@ function Header({ user, onSignOut }: { user: User; onSignOut: () => void }) {
   )
 }
 
-function StorageBar({ used, total }: { used: number; total: number }) {
-  const percent = Math.min(100, (used / total) * 100)
+function StorageBar({ usedBytes, limitMb }: { usedBytes: number; limitMb: number }) {
+  const limitBytes = limitMb * 1024 * 1024
+  const percent = Math.min(100, (usedBytes / limitBytes) * 100)
+
+  function fmt(bytes: number) {
+    if (bytes < 1024 * 1024 * 1024) {
+      return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+    }
+    return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`
+  }
+
+  function fmtLimit(mb: number) {
+    if (mb < 1024) return `${mb} MB`
+    return `${(mb / 1024).toFixed(0)} GB`
+  }
+
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: 12,
@@ -133,7 +199,7 @@ function StorageBar({ used, total }: { used: number; total: number }) {
         <div style={{ height: "100%", width: `${percent}%`, background: TEAL, borderRadius: 999, transition: "width 0.2s ease" }} />
       </div>
       <span style={{ fontSize: 12, fontWeight: 600, color: MUTED, fontFamily: FONT, whiteSpace: "nowrap" }}>
-        {used} GB of {total} GB used
+        {fmt(usedBytes)} of {fmtLimit(limitMb)} used
       </span>
     </div>
   )
@@ -144,22 +210,48 @@ function getPublicPage(): "home" | "pricing" {
 }
 
 export default function HolsterApp() {
-  const [user, setUser]           = useState<User | null>(null)
-  const [loading, setLoading]     = useState(true)
-  const [cryptoKey, setCryptoKey] = useState<CryptoKey | null>(null)
-  const [showAuth, setShowAuth]   = useState(false)
-  const [publicPage, setPublicPage] = useState<"home" | "pricing">(getPublicPage)
+  const [user, setUser]                   = useState<User | null>(null)
+  const [loading, setLoading]             = useState(true)
+  const [cryptoKey, setCryptoKey]         = useState<CryptoKey | null>(null)
+  const [showAuth, setShowAuth]           = useState(false)
+  const [publicPage, setPublicPage]       = useState<"home" | "pricing">(getPublicPage)
+  const [storageUsedBytes, setStorageUsedBytes] = useState(0)
+  const [storageLimitMb, setStorageLimitMb]     = useState(250)
+
+  async function loadStorage(currentUser: User) {
+    const entitlements = await getHolsterEntitlements(currentUser.id)
+    setStorageLimitMb(entitlements?.holster_storage_limit_mb ?? 250)
+
+    const { data } = await supabase
+      .from("holster_files")
+      .select("size_bytes")
+      .eq("user_id", currentUser.id)
+
+    const total = (data ?? []).reduce(
+      (sum, row) => sum + Number(row.size_bytes ?? 0),
+      0
+    )
+    setStorageUsedBytes(total)
+  }
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
-      setUser(data.session?.user ?? null)
+      const u = data.session?.user ?? null
+      setUser(u)
       setLoading(false)
+      if (u) void loadStorage(u)
     })
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null)
+      const u = session?.user ?? null
+      setUser(u)
       setLoading(false)
-      if (session?.user) setShowAuth(false)
+      if (u) {
+        setShowAuth(false)
+        void loadStorage(u)
+      }
     })
+
     return () => subscription.unsubscribe()
   }, [])
 
@@ -173,6 +265,11 @@ export default function HolsterApp() {
     const path = page === "pricing" ? "/pricing" : "/"
     window.history.pushState({}, "", path)
     setPublicPage(page)
+  }
+
+  function navigateApp() {
+    window.history.pushState({}, "", "/")
+    setPublicPage("home")
   }
 
   async function handleSignOut() {
@@ -204,20 +301,48 @@ export default function HolsterApp() {
     )
   }
 
+  if (publicPage === "pricing") {
+    return (
+      <div style={{ minHeight: "100vh", background: SHELL, display: "flex", flexDirection: "column" }}>
+        <style>{GLOBAL_STYLES}</style>
+        <Header
+          user={user}
+          onHome={navigateApp}
+          onPricing={() => navigatePublic("pricing")}
+          onSignOut={handleSignOut}
+        />
+        <Pricing onGetStarted={navigateApp} />
+      </div>
+    )
+  }
+
   return (
     <div style={{ width: "100%", height: "100vh", background: SHELL, display: "flex", flexDirection: "column" }}>
       <style>{GLOBAL_STYLES}</style>
       <style>{`
         @media (max-width: 480px) {
           .hol-user-email { display: none !important; }
+          .hol-logged-nav-links { display: none !important; }
         }
-        @media (max-width: 600px) {
+        @media (max-width: 760px) {
           .hol-user-email { display: none !important; }
         }
       `}</style>
-      <Header user={user} onSignOut={handleSignOut} />
-      <StorageBar used={30} total={100} />
-      <HolsterPanel user={user} cryptoKey={cryptoKey} onCryptoKeySet={setCryptoKey} />
+
+      <Header
+        user={user}
+        onHome={navigateApp}
+        onPricing={() => navigatePublic("pricing")}
+        onSignOut={handleSignOut}
+      />
+
+      <StorageBar usedBytes={storageUsedBytes} limitMb={storageLimitMb} />
+      <HolsterPanel
+        user={user}
+        cryptoKey={cryptoKey}
+        onCryptoKeySet={setCryptoKey}
+        onStorageChanged={() => void loadStorage(user)}
+      />
     </div>
   )
 }
