@@ -15,6 +15,7 @@ type Props = {
   onPricing: () => void
   onSignIn: () => void
   onGetStarted: () => void
+  onUpgrade: (plan: "pro" | "max") => void
 }
 
 function NavButton({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
@@ -215,7 +216,12 @@ function PlanCard({
   )
 }
 
-export function Pricing({ onGetStarted }: Pick<Props, "onGetStarted">) {
+export function Pricing({
+  onGetStarted,
+  onUpgrade,
+}: Pick<Props, "onGetStarted"> & {
+  onUpgrade: (plan: "pro" | "max") => void
+}) {
   return (
     <section style={{ maxWidth: 1180, margin: "0 auto", padding: "70px 24px 76px", display: "grid", gap: 28 }}>
       <div style={{ display: "grid", gap: 10, textAlign: "center" }}>
@@ -246,7 +252,7 @@ export function Pricing({ onGetStarted }: Pick<Props, "onGetStarted">) {
         <PlanCard
           name="Pro"
           description="For people who use Holster as their daily operational memory."
-          price="TBD"
+          price="$5.99"
           priceSuffix="/ month"
           highlighted
           features={[
@@ -257,13 +263,13 @@ export function Pricing({ onGetStarted }: Pick<Props, "onGetStarted">) {
             "Keep existing data if you downgrade",
           ]}
           button="Get Pro"
-          onGetStarted={onGetStarted}
+          onGetStarted={() => onUpgrade("pro")}
         />
 
         <PlanCard
           name="Ultra"
           description="For heavier file storage, production assets, audio, and video."
-          price="TBD"
+          price="$14.99"
           priceSuffix="/ month"
           features={[
             "Unlimited collections",
@@ -273,14 +279,14 @@ export function Pricing({ onGetStarted }: Pick<Props, "onGetStarted">) {
             "Keep existing data if you downgrade",
           ]}
           button="Go Ultra"
-          onGetStarted={onGetStarted}
+          onGetStarted={() => onUpgrade("max")}
         />
       </div>
     </section>
   )
 }
 
-export default function HolsterLandingPage({ page, onHome, onPricing, onSignIn, onGetStarted }: Props) {
+export default function HolsterLandingPage({ page, onHome, onPricing, onSignIn, onGetStarted, onUpgrade }: Props) {
   return (
     <div style={{ minHeight: "100vh", background: SHELL, color: TEXT, display: "flex", flexDirection: "column" }}>
       <style>{`
@@ -320,7 +326,11 @@ export default function HolsterLandingPage({ page, onHome, onPricing, onSignIn, 
       </header>
 
       <main style={{ flex: 1 }}>
-        {page === "pricing" ? <Pricing onGetStarted={onGetStarted} /> : <Landing onPricing={onPricing} onGetStarted={onGetStarted} />}
+        {page === "pricing" ? (
+          <Pricing onGetStarted={onGetStarted} onUpgrade={onUpgrade} />
+        ) : (
+          <Landing onPricing={onPricing} onGetStarted={onGetStarted} />
+        )}
       </main>
 
       <footer style={{

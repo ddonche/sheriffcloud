@@ -10,6 +10,35 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 )
 
+type HolsterPlan = "free" | "pro" | "max"
+
+const HOLSTER_PLANS: Record<HolsterPlan, {
+  storageMb: number
+  collectionLimit: number | null
+  maxUploadSizeMb: number
+}> = {
+  free: {
+    storageMb: 250,
+    collectionLimit: 20,
+    maxUploadSizeMb: 10,
+  },
+  pro: {
+    storageMb: 5120,
+    collectionLimit: null,
+    maxUploadSizeMb: 250,
+  },
+  max: {
+    storageMb: 51200,
+    collectionLimit: null,
+    maxUploadSizeMb: 2048,
+  },
+}
+
+function normalizeHolsterPlan(value: unknown): HolsterPlan {
+  if (value === "pro" || value === "max") return value
+  return "free"
+}
+
 // ── Sheriff Cloud plan fulfillment ────────────────────────────────────────────
 
 async function applyPlan(userId: string, basePlan: "free" | "core", status: string) {
@@ -32,15 +61,31 @@ async function applyPlan(userId: string, basePlan: "free" | "core", status: stri
     throw plansError
   }
 
+  const { data: existingEntitlements } = await supabase
+    .from("account_entitlements")
+    .select(`
+      holster_plan,
+      holster_storage_limit_mb,
+      holster_collection_limit,
+      holster_max_upload_size_mb
+    `)
+    .eq("user_id", userId)
+    .maybeSingle()
+
   const { error: entitlementsError } = await supabase
     .from("account_entitlements")
     .upsert(
       {
         user_id: userId,
         site_limit: isCore ? 5 : 3,
-        custom_domain_access: isCore ? true : false,
+        custom_domain_access: isCore,
         sites_storage_limit_mb: 500,
-        holster_storage_limit_mb: 0,
+
+        holster_plan: existingEntitlements?.holster_plan ?? "free",
+        holster_storage_limit_mb: existingEntitlements?.holster_storage_limit_mb ?? HOLSTER_PLANS.free.storageMb,
+        holster_collection_limit: existingEntitlements?.holster_collection_limit ?? HOLSTER_PLANS.free.collectionLimit,
+        holster_max_upload_size_mb: existingEntitlements?.holster_max_upload_size_mb ?? HOLSTER_PLANS.free.maxUploadSizeMb,
+
         media_storage_limit_mb: 0,
         creator_bundle_access: false,
         studio_access: false,
@@ -54,7 +99,56 @@ async function applyPlan(userId: string, basePlan: "free" | "core", status: stri
     throw entitlementsError
   }
 
-  console.log("Applied plan:", { userId, basePlan })
+  console.log("Applied Sheriff plan:", { userId, basePlan, status })
+}
+
+// ── Holster plan fulfillment ──────────────────────────────────────────────────
+
+async function applyHolsterPlan(userId: string, plan: HolsterPlan) {
+  const config = HOLSTER_PLANS[plan]
+
+  const { data: existingEntitlements } = await supabase
+    .from("account_entitlements")
+    .select(`
+      site_limit,
+      custom_domain_access,
+      sites_storage_limit_mb,
+      media_storage_limit_mb,
+      creator_bundle_access,
+      studio_access
+    `)
+    .eq("user_id", userId)
+    .maybeSingle()
+
+  const { error } = await supabase
+    .from("account_entitlements")
+    .upsert(
+      {
+        user_id: userId,
+
+        site_limit: existingEntitlements?.site_limit ?? 3,
+        custom_domain_access: existingEntitlements?.custom_domain_access ?? false,
+        sites_storage_limit_mb: existingEntitlements?.sites_storage_limit_mb ?? 500,
+
+        holster_plan: plan,
+        holster_storage_limit_mb: config.storageMb,
+        holster_collection_limit: config.collectionLimit,
+        holster_max_upload_size_mb: config.maxUploadSizeMb,
+
+        media_storage_limit_mb: existingEntitlements?.media_storage_limit_mb ?? 0,
+        creator_bundle_access: existingEntitlements?.creator_bundle_access ?? false,
+        studio_access: existingEntitlements?.studio_access ?? false,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id" }
+    )
+
+  if (error) {
+    console.error("applyHolsterPlan error", error)
+    throw error
+  }
+
+  console.log("Applied Holster plan:", { userId, plan, config })
 }
 
 // ── Chatterbox credit fulfillment ─────────────────────────────────────────────
@@ -69,7 +163,6 @@ async function fulfillCreditPurchase(session: Stripe.Checkout.Session) {
     return
   }
 
-  // Idempotency check — don't double-fulfill
   const { data: order } = await supabase
     .from("chatterbox_stripe_orders")
     .select("id, status, credits_to_grant")
@@ -129,10 +222,11 @@ Deno.serve(async (req) => {
       if (!userId) {
         console.error("checkout.session.completed: no user_id in metadata")
       } else if (session.metadata?.credits) {
-        // Chatterbox credit pack purchase
         await fulfillCreditPurchase(session)
+      } else if (session.metadata?.product === "holster") {
+        const plan = normalizeHolsterPlan(session.metadata?.holster_plan)
+        await applyHolsterPlan(userId, plan)
       } else if (session.metadata?.base_plan) {
-        // Sheriff Cloud subscription checkout
         await applyPlan(userId, "core", "active")
       } else {
         console.warn("checkout.session.completed: unrecognized metadata", session.metadata)
@@ -145,7 +239,15 @@ Deno.serve(async (req) => {
     ) {
       const subscription = event.data.object as Stripe.Subscription
       const userId = subscription.metadata?.user_id
-      if (userId) {
+
+      if (userId && subscription.metadata?.product === "holster") {
+        const activeLikeStatuses = new Set(["active", "trialing"])
+        const plan = activeLikeStatuses.has(subscription.status)
+          ? normalizeHolsterPlan(subscription.metadata?.holster_plan)
+          : "free"
+
+        await applyHolsterPlan(userId, plan)
+      } else if (userId) {
         await applyPlan(userId, "core", subscription.status)
       }
     }
@@ -153,7 +255,10 @@ Deno.serve(async (req) => {
     if (event.type === "customer.subscription.deleted") {
       const subscription = event.data.object as Stripe.Subscription
       const userId = subscription.metadata?.user_id
-      if (userId) {
+
+      if (userId && subscription.metadata?.product === "holster") {
+        await applyHolsterPlan(userId, "free")
+      } else if (userId) {
         await applyPlan(userId, "free", "active")
       }
     }

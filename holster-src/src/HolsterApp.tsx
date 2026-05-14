@@ -276,6 +276,40 @@ export default function HolsterApp() {
     await supabase.auth.signOut()
   }
 
+  async function handleHolsterUpgrade(plan: "pro" | "max") {
+    const { data: sessionData } = await supabase.auth.getSession()
+    const token = sessionData.session?.access_token
+
+    if (!token) {
+      alert("You must be signed in.")
+      return
+    }
+
+    const response = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create_checkout_session`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          product: "holster",
+          plan,
+        }),
+      }
+    )
+
+    const data = await response.json()
+
+    if (!response.ok || !data?.checkout_url) {
+      alert(`Checkout failed: ${data?.error ?? "Unknown error"}`)
+      return
+    }
+
+    window.location.href = data.checkout_url
+  }
+
   if (loading) {
     return (
       <div style={{ minHeight: "100vh", background: SHELL, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -295,6 +329,7 @@ export default function HolsterApp() {
           onPricing={() => navigatePublic("pricing")}
           onSignIn={() => setShowAuth(true)}
           onGetStarted={() => setShowAuth(true)}
+          onUpgrade={handleHolsterUpgrade}
         />
         {showAuth && <AuthModal onAuth={setUser} />}
       </>
@@ -311,7 +346,10 @@ export default function HolsterApp() {
           onPricing={() => navigatePublic("pricing")}
           onSignOut={handleSignOut}
         />
-        <Pricing onGetStarted={navigateApp} />
+        <Pricing
+          onGetStarted={navigateApp}
+          onUpgrade={handleHolsterUpgrade}
+        />
       </div>
     )
   }
