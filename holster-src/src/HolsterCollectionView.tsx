@@ -8,6 +8,11 @@ import type { HolsterNote, NoteType } from "./HolsterNotes"
 import { PinPrompt } from "./HolsterPasswords"
 import { deriveKey, checkVerifier, decrypt } from "./holsterCrypto"
 import { ColorDot } from "./HolsterColorPicker"
+import HolsterBoardView from "./components/HolsterBoardView"
+import type {
+  HolsterList,
+  HolsterListItem,
+} from "./components/HolsterBoardTypes"
 
 const FONT        = `"Inter", system-ui, -apple-system, sans-serif`
 const CONTENT_BG  = "#f8fafc"
@@ -39,29 +44,6 @@ type RawItem = {
   _type: ItemType
 }
 
-type HolsterList = {
-  id: string
-  title: string
-  description: string | null
-  collection_id: string | null
-  sort_order: number
-  created_at: string
-  updated_at: string
-}
-
-type HolsterListItem = {
-  id: string
-  user_id: string
-  list_id: string
-  title: string
-  note: string | null
-  is_task: boolean
-  is_done: boolean
-  sort_order: number
-  created_at: string
-  updated_at: string
-}
-
 const TYPE_CONFIG: Record<ItemType, { label: string; color: string; table: string; encrypted?: boolean }> = {
   notes:     { label: "Notes",     color: TEAL,      table: "holster_notes" },
   snippets:  { label: "Snippets",  color: "#7c6fa0", table: "holster_snippets" },
@@ -83,12 +65,6 @@ const CARD_STYLE: React.CSSProperties = {
   flexDirection: "column",
   gap: 8,
 }
-
-const LIST_ITEM_PADDING = "10px 12px"
-const LIST_ITEM_RADIUS = 8
-const LIST_DROP_UI_HEIGHT = 40
-const LIST_DROP_HITBOX_HEIGHT = 12
-const LIST_DROP_UI_MARGIN = 6
 
 function CardTitle({ title, color }: { title: string; color: string }) {
   return (
@@ -689,49 +665,6 @@ function SmallButton({ children, onClick, tone = "default", disabled = false }: 
   )
 }
 
-function DropZone({
-  active,
-  onDragOver,
-  onDrop,
-}: {
-  active: boolean
-  onDragOver: (e: React.DragEvent) => void
-  onDrop: (e: React.DragEvent) => void
-}) {
-  return (
-    <div
-      onDragOver={onDragOver}
-      onDrop={onDrop}
-      style={{
-        position: "relative",
-        height: active ? LIST_DROP_UI_HEIGHT + LIST_DROP_UI_MARGIN * 2 : LIST_DROP_HITBOX_HEIGHT,
-        transition: "height 0.12s ease",
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          left: 0,
-          right: 0,
-          top: active ? LIST_DROP_UI_MARGIN : "50%",
-          transform: active ? "none" : "translateY(-50%)",
-          minHeight: active ? LIST_DROP_UI_HEIGHT : 0,
-          padding: active ? LIST_ITEM_PADDING : 0,
-          borderRadius: LIST_ITEM_RADIUS,
-          border: active ? `2px dashed ${TEAL}` : "2px dashed transparent",
-          background: active ? `${TEAL}10` : "transparent",
-          boxSizing: "border-box",
-          display: "flex",
-          alignItems: "center",
-          pointerEvents: "none",
-          opacity: active ? 1 : 0,
-          transition: "min-height 0.12s ease, padding 0.12s ease, background 0.12s ease, border-color 0.12s ease, opacity 0.12s ease, top 0.12s ease, transform 0.12s ease",
-        }}
-      />
-    </div>
-  )
-}
-
 function SummaryBar({ counts }: { counts: Partial<Record<ItemType, number>> }) {
   return (
     <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
@@ -831,7 +764,17 @@ export default function HolsterCollectionView({ user, collection, collections, c
 
     const { data: listData } = await supabase
       .from("holster_lists")
-      .select("id, title, description, collection_id, sort_order, created_at, updated_at")
+      .select(`
+        id,
+        user_id,
+        board_id,
+        title,
+        description,
+        collection_id,
+        sort_order,
+        created_at,
+        updated_at
+      `)
       .eq("user_id", user.id)
       .eq("collection_id", collection.id)
       .order("sort_order", { ascending: true })
@@ -841,7 +784,19 @@ export default function HolsterCollectionView({ user, collection, collections, c
 
     const { data: listItemData } = await supabase
       .from("holster_list_items")
-      .select("id, user_id, list_id, title, note, is_task, is_done, sort_order, created_at, updated_at")
+      .select(`
+        id,
+        user_id,
+        list_id,
+        title,
+        note,
+        is_task,
+        is_done,
+        colors,
+        sort_order,
+        created_at,
+        updated_at
+      `)
       .eq("user_id", user.id)
       .order("sort_order", { ascending: true })
       .order("created_at", { ascending: true })
@@ -924,7 +879,19 @@ export default function HolsterCollectionView({ user, collection, collections, c
       .from("holster_list_items")
       .update({ is_done: next })
       .eq("id", item.id)
-      .select("id, user_id, list_id, title, note, is_task, is_done, sort_order, created_at, updated_at")
+      .select(`
+        id,
+        user_id,
+        list_id,
+        title,
+        note,
+        is_task,
+        is_done,
+        colors,
+        sort_order,
+        created_at,
+        updated_at
+      `)
       .single()
     if (!error && data) setListItems(prev => prev.map(row => row.id === item.id ? data : row))
   }
@@ -941,7 +908,19 @@ export default function HolsterCollectionView({ user, collection, collections, c
         is_done: item.is_task ? item.is_done : false,
       })
       .eq("id", item.id)
-      .select("id, user_id, list_id, title, note, is_task, is_done, sort_order, created_at, updated_at")
+      .select(`
+        id,
+        user_id,
+        list_id,
+        title,
+        note,
+        is_task,
+        is_done,
+        colors,
+        sort_order,
+        created_at,
+        updated_at
+      `)
       .single()
     if (!error && data) {
       setListItems(prev => prev.map(row => row.id === item.id ? data : row))
@@ -980,7 +959,17 @@ export default function HolsterCollectionView({ user, collection, collections, c
         description: newListDesc.trim() || null,
         sort_order: nextSort,
       })
-      .select("id, title, description, collection_id, sort_order, created_at, updated_at")
+      .select(`
+        id,
+        user_id,
+        board_id,
+        title,
+        description,
+        collection_id,
+        sort_order,
+        created_at,
+        updated_at
+      `)
       .single()
     setAddingList(false)
     if (!error && data) {
@@ -1008,7 +997,19 @@ export default function HolsterCollectionView({ user, collection, collections, c
         is_done: false,
         sort_order: nextSort,
       })
-      .select("id, user_id, list_id, title, note, is_task, is_done, sort_order, created_at, updated_at")
+      .select(`
+        id,
+        user_id,
+        list_id,
+        title,
+        note,
+        is_task,
+        is_done,
+        colors,
+        sort_order,
+        created_at,
+        updated_at
+      `)
       .single()
     if (!error && data) {
       setListItems(prev => [...prev, data])
@@ -1184,201 +1185,26 @@ export default function HolsterCollectionView({ user, collection, collections, c
           )}
 
           {lists.length > 0 ? (
-            <div className="holster-board-row" style={{ display: "flex", gap: 12, alignItems: "flex-start", overflowX: "auto", overflowY: "hidden", paddingBottom: 8, scrollbarWidth: "none", msOverflowStyle: "none" }}>
-              {lists.map(list => {
-                const open = openListIds.includes(list.id)
-                const listRows = itemsByList[list.id] ?? []
-                return (
-                  <div key={list.id} style={{ width: 280, minWidth: 280, maxHeight: open ? "70vh" : "none", border: open ? `1px solid ${TEAL}` : `1px solid ${CONTENT_BDR}`, borderRadius: 12, background: open ? "#fcfeff" : CARD_BG, overflow: "hidden", alignSelf: "flex-start", boxShadow: open ? "0 0 0 2px rgba(91,149,167,0.18), 0 12px 24px rgba(15, 23, 42, 0.10)" : "0 1px 2px rgba(15, 23, 42, 0.04)" }}>
-                    <button
-                      type="button"
-                      onClick={() => toggleListOpen(list.id)}
-                      style={{ width: "100%", border: "none", background: open ? "#fcfeff" : CARD_BG, textAlign: "left", padding: 14, display: "grid", gap: 6, cursor: "pointer", fontFamily: FONT, position: open ? "sticky" : "relative", top: 0, zIndex: 2, boxShadow: open ? "0 1px 0 rgba(226,232,240,0.95)" : "none" }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 14, fontWeight: 800, color: TEXT, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{list.title}</div>
-                          <div style={{ marginTop: 2, fontSize: 12, color: DIM }}>{listRows.length} {listRows.length === 1 ? "item" : "items"} · Updated {timeAgo(list.updated_at)}</div>
-                        </div>
-                        <svg viewBox="0 0 640 640" width={12} height={12} fill={DIM}>
-                          {open
-                            ? <path d="M320 192L576 448L512 512L320 320L128 512L64 448Z" />
-                            : <path d="M320 448L64 192L128 128L320 320L512 128L576 192Z" />}
-                        </svg>
-                      </div>
-                      {list.description && <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.5 }}>{list.description}</div>}
-                    </button>
-
-                    {open && (
-                      <div style={{ borderTop: `1px solid ${CONTENT_BDR}`, padding: 12, display: "grid", gap: 10, overflowY: "auto", maxHeight: "calc(70vh - 72px)" }}>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, alignItems: "center", paddingTop: 4, position: "sticky", top: 0, zIndex: 1, background: CARD_BG, paddingBottom: 8 }}>
-                          <input
-                            value={getComposer(list.id).title}
-                            onChange={e => setComposer(list.id, { ...getComposer(list.id), title: e.target.value })}
-                            placeholder="Add item and press Enter"
-                            onKeyDown={e => {
-                              if (e.key === "Enter") {
-                                e.preventDefault()
-                                void addItemToList(list.id)
-                              }
-                            }}
-                            style={{ width: "100%", boxSizing: "border-box", height: 38, padding: "0 12px", borderRadius: 9, border: `1px solid ${CONTENT_BDR}`, background: "#fff", fontSize: 13, fontFamily: FONT, color: TEXT, outline: "none" }}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => void addItemToList(list.id)}
-                            style={{ width: 38, height: 38, borderRadius: 9, border: `1px solid ${CONTENT_BDR}`, background: CARD_BG, color: TEAL, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
-                            aria-label="Add item"
-                            title="Add item"
-                          >
-                            <svg viewBox="0 0 640 640" width={16} height={16} fill="currentColor"><path d="M296 408L296 344L232 344C218.7 344 208 333.3 208 320C208 306.7 218.7 296 232 296L296 296L296 232C296 218.7 306.7 208 320 208C333.3 208 344 218.7 344 232L344 296L408 296C421.3 296 432 306.7 432 320C432 333.3 421.3 344 408 344L344 344L344 408C344 421.3 333.3 432 320 432C306.7 432 296 421.3 296 408z"/></svg>
-                          </button>
-                        </div>
-
-                        <div style={{ display: "grid", gap: 0 }}>
-                          {(() => {
-                            const rows = itemsByList[list.id] ?? []
-                            const activeEnd = draggingItemId !== null && dropTarget?.listId === list.id && dropTarget.index === rows.length
-                            return (
-                              <>
-                                {rows.map((item, index) => {
-                                  const activeBefore = draggingItemId !== null && dropTarget?.listId === list.id && dropTarget.index === index
-                                  const expanded = expandedItemIds.includes(item.id)
-                                  const dragging = draggingItemId === item.id
-                                  return (
-                                    <div key={item.id} style={{ display: "grid", gap: 6 }}>
-                                      <DropZone
-                                        active={activeBefore}
-                                        onDragOver={e => {
-                                          e.preventDefault()
-                                          if (draggingItemId && draggingItemId !== item.id && (dropTarget?.listId !== list.id || dropTarget.index !== index)) {
-                                            setDropTarget({ listId: list.id, index })
-                                          }
-                                        }}
-                                        onDrop={e => {
-                                          e.preventDefault()
-                                          const movingId = draggingItemId ?? e.dataTransfer.getData("text/plain")
-                                          if (movingId) void moveItem(movingId, list.id, index)
-                                          setDraggingItemId(null)
-                                          setDropTarget(null)
-                                        }}
-                                      />
-                                      <div
-                                        draggable
-                                        style={{ cursor: dragging ? "grabbing" : "grab" }}
-                                        onDragStart={e => {
-                                          setDraggingItemId(item.id)
-                                          e.dataTransfer.setData("text/plain", item.id)
-                                          e.dataTransfer.effectAllowed = "move"
-                                        }}
-                                        onDragEnd={() => {
-                                          setDraggingItemId(null)
-                                          setDropTarget(null)
-                                        }}
-                                      >
-                                        <div style={{ border: `1px solid ${CONTENT_BDR}`, borderRadius: LIST_ITEM_RADIUS, background: CARD_BG, overflow: "hidden", boxShadow: dragging ? "0 12px 28px rgba(15, 23, 42, 0.18)" : "0 1px 2px rgba(15, 23, 42, 0.04)", opacity: dragging ? 0.55 : 1, transform: dragging ? "scale(1.02)" : "scale(1)", transition: "transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease" }}>
-                                          <button
-                                            type="button"
-                                            onClick={() => toggleItemExpanded(item.id)}
-                                            style={{ width: "100%", textAlign: "left", border: "none", background: "transparent", padding: LIST_ITEM_PADDING, display: "flex", alignItems: "center", gap: 10, cursor: dragging ? "grabbing" : "pointer", fontFamily: FONT }}
-                                          >
-                                            {item.is_task ? (
-                                              <input
-                                                type="checkbox"
-                                                checked={item.is_done}
-                                                onChange={e => {
-                                                  e.stopPropagation()
-                                                  void handleQuickDone(item, e.target.checked)
-                                                }}
-                                                onClick={e => e.stopPropagation()}
-                                              />
-                                            ) : (
-                                              <span style={{ width: 10, height: 10, borderRadius: "50%", background: `${TEAL}55`, flexShrink: 0 }} />
-                                            )}
-
-                                            <div style={{ flex: 1, minWidth: 0 }}>
-                                              <div style={{ fontSize: 13, fontWeight: 700, color: TEXT, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.title}</div>
-                                              {(item.note || item.is_task) && (
-                                                <div style={{ marginTop: 2, fontSize: 12, color: DIM, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                                  {item.is_task ? (item.is_done ? "Task · Done" : "Task") : "Notes"}
-                                                  {item.note ? " · " + item.note : ""}
-                                                </div>
-                                              )}
-                                            </div>
-
-                                            <svg viewBox="0 0 640 640" width={12} height={12} fill={DIM} style={{ flexShrink: 0 }}>
-                                              {expanded
-                                                ? <path d="M320 192L576 448L512 512L320 320L128 512L64 448Z" />
-                                                : <path d="M320 448L64 192L128 128L320 320L512 128L576 192Z" />}
-                                            </svg>
-                                          </button>
-
-                                          {expanded && (
-                                            <div style={{ borderTop: `1px solid ${CONTENT_BDR}`, padding: 12, display: "grid", gap: 8 }}>
-                                              <input
-                                                value={item.title}
-                                                onChange={e => patchItem(item.id, { title: e.target.value })}
-                                                placeholder="Item title"
-                                                style={{ width: "100%", boxSizing: "border-box", height: 36, padding: "0 10px", borderRadius: 7, border: `1px solid ${CONTENT_BDR}`, background: CARD_BG, fontSize: 13, fontFamily: FONT, color: TEXT, outline: "none" }}
-                                              />
-                                              <textarea
-                                                value={item.note ?? ""}
-                                                onChange={e => patchItem(item.id, { note: e.target.value })}
-                                                placeholder="Notes"
-                                                rows={3}
-                                                style={{ width: "100%", boxSizing: "border-box", minHeight: 78, padding: 10, borderRadius: 7, border: `1px solid ${CONTENT_BDR}`, background: CARD_BG, fontSize: 13, fontFamily: FONT, color: TEXT, outline: "none", resize: "vertical", lineHeight: 1.5 }}
-                                              />
-                                              <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13, color: MUTED, fontFamily: FONT }}>
-                                                <input
-                                                  type="checkbox"
-                                                  checked={item.is_task}
-                                                  onChange={e => patchItem(item.id, { is_task: e.target.checked, is_done: e.target.checked ? item.is_done : false })}
-                                                />
-                                                Is this a task?
-                                              </label>
-                                              {item.is_task && (
-                                                <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13, color: MUTED, fontFamily: FONT }}>
-                                                  <input type="checkbox" checked={item.is_done} onChange={e => patchItem(item.id, { is_done: e.target.checked })} />
-                                                  Done
-                                                </label>
-                                              )}
-                                              <div style={{ display: "flex", gap: 8 }}>
-                                                <SmallButton tone="primary" onClick={() => void handleSaveItem(item)}>Save</SmallButton>
-                                                <SmallButton tone="danger" onClick={() => void handleDeleteItem(item)}>Delete</SmallButton>
-                                              </div>
-                                            </div>
-                                          )}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  )
-                                })}
-                                <DropZone
-                                  active={activeEnd}
-                                  onDragOver={e => {
-                                    e.preventDefault()
-                                    if (draggingItemId && (dropTarget?.listId !== list.id || dropTarget.index !== rows.length)) {
-                                      setDropTarget({ listId: list.id, index: rows.length })
-                                    }
-                                  }}
-                                  onDrop={e => {
-                                    e.preventDefault()
-                                    const movingId = draggingItemId ?? e.dataTransfer.getData("text/plain")
-                                    if (movingId) void moveItem(movingId, list.id, rows.length)
-                                    setDraggingItemId(null)
-                                    setDropTarget(null)
-                                  }}
-                                />
-                              </>
-                            )
-                          })()}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
+            <HolsterBoardView
+              lists={lists}
+              itemsByList={itemsByList}
+              openListIds={openListIds}
+              expandedItemIds={expandedItemIds}
+              draggingItemId={draggingItemId}
+              dropTarget={dropTarget}
+              getComposer={getComposer}
+              setComposer={setComposer}
+              toggleListOpen={toggleListOpen}
+              toggleItemExpanded={toggleItemExpanded}
+              addItemToList={addItemToList}
+              moveItem={moveItem}
+              setDraggingItemId={setDraggingItemId}
+              setDropTarget={setDropTarget}
+              patchItem={patchItem}
+              handleQuickDone={handleQuickDone}
+              handleSaveItem={handleSaveItem}
+              handleDeleteItem={handleDeleteItem}
+            />
           ) : !loading ? (
             <div style={{ fontSize: 13, color: DIM, fontFamily: FONT }}>No lists in this collection yet.</div>
           ) : null}

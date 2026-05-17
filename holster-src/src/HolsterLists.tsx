@@ -2,8 +2,15 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react"
 import { supabase } from "./supabase"
 import type { User } from "@supabase/supabase-js"
 import type { HolsterCollection } from "./HolsterPanel"
-import { timeAgo } from "./HolsterNotes"
 import { CollectionPicker } from "./HolsterCollectionPicker"
+import type {
+  HolsterList,
+  HolsterListItem,
+} from "./components/HolsterBoardTypes"
+import HolsterBoardView, {
+  type ComposerState,
+  type DropTarget,
+} from "./components/HolsterBoardView"
 
 const FONT        = `"Inter", system-ui, -apple-system, sans-serif`
 const CONTENT_BG  = "#f8fafc"
@@ -14,28 +21,6 @@ const RED         = "#c14141"
 const TEXT        = "#0f172a"
 const MUTED       = "#475569"
 const DIM         = "#94a3b8"
-
-type HolsterList = {
-  id: string
-  title: string
-  description: string | null
-  collection_id: string | null
-  sort_order: number
-  created_at: string
-  updated_at: string
-}
-
-type HolsterListItem = {
-  id: string
-  list_id: string
-  title: string
-  note: string | null
-  is_task: boolean
-  is_done: boolean
-  sort_order: number
-  created_at: string
-  updated_at: string
-}
 
 type CollectionFilter = "all" | "none" | string
 
@@ -131,7 +116,17 @@ function AddListCard({
         description: description.trim() || null,
         collection_id: collectionId,
       })
-      .select("id, title, description, collection_id, sort_order, created_at, updated_at")
+      .select(`
+        id,
+        user_id,
+        board_id,
+        title,
+        description,
+        collection_id,
+        sort_order,
+        created_at,
+        updated_at
+      `)
       .single()
 
     setSaving(false)
@@ -232,520 +227,6 @@ function AddListCard({
   )
 }
 
-function ItemComposer({
-  onAdd,
-}: {
-  onAdd: (payload: { title: string; note: string | null; is_task: boolean }) => Promise<void>
-}) {
-  const [title, setTitle] = useState("")
-  const [showNotes, setShowNotes] = useState(false)
-  const [note, setNote] = useState("")
-  const [isTask, setIsTask] = useState(false)
-  const [saving, setSaving] = useState(false)
-
-  async function submit() {
-    const clean = title.trim()
-    if (!clean || saving) return
-    setSaving(true)
-    await onAdd({
-      title: clean,
-      note: note.trim() || null,
-      is_task: isTask,
-    })
-    setSaving(false)
-    setTitle("")
-    setNote("")
-    setIsTask(false)
-    setShowNotes(false)
-  }
-
-  return (
-    <div style={{ display: "grid", gap: 8 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, alignItems: "center" }}>
-        <input
-          value={title}
-          onChange={e => setTitle(e.target.value)}
-          placeholder="Add new"
-          style={inputStyle}
-          onKeyDown={e => {
-            if (e.key === "Enter") {
-              e.preventDefault()
-              void submit()
-            }
-          }}
-        />
-
-        <ChipButton active={showNotes} onClick={() => setShowNotes(v => !v)}>
-          Notes
-        </ChipButton>
-      </div>
-
-      {showNotes && (
-        <textarea
-          value={note}
-          onChange={e => setNote(e.target.value)}
-          placeholder="Notes"
-          rows={3}
-          style={textareaStyle}
-        />
-      )}
-
-      <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13, color: MUTED, fontFamily: FONT }}>
-        <input
-          type="checkbox"
-          checked={isTask}
-          onChange={e => setIsTask(e.target.checked)}
-        />
-        Is this a task?
-      </label>
-    </div>
-  )
-}
-
-function ListItemRow({
-  item,
-  onUpdated,
-  onDeleted,
-}: {
-  item: HolsterListItem
-  onUpdated: (row: HolsterListItem) => void
-  onDeleted: (id: string) => void
-}) {
-  const [open, setOpen] = useState(false)
-  const [title, setTitle] = useState(item.title)
-  const [note, setNote] = useState(item.note ?? "")
-  const [isTask, setIsTask] = useState(item.is_task)
-  const [isDone, setIsDone] = useState(item.is_done)
-  const [saving, setSaving] = useState(false)
-  const [deleting, setDeleting] = useState(false)
-
-  useEffect(() => {
-    setTitle(item.title)
-    setNote(item.note ?? "")
-    setIsTask(item.is_task)
-    setIsDone(item.is_done)
-  }, [item.id, item.title, item.note, item.is_task, item.is_done])
-
-  async function quickDone(next: boolean) {
-    const { data, error } = await supabase
-      .from("holster_list_items")
-      .update({ is_done: next })
-      .eq("id", item.id)
-      .select("id, list_id, title, note, is_task, is_done, sort_order, created_at, updated_at")
-      .single()
-
-    if (!error && data) onUpdated(data)
-  }
-
-  async function handleSave() {
-    const clean = title.trim()
-    if (!clean) return
-    setSaving(true)
-
-    const { data, error } = await supabase
-      .from("holster_list_items")
-      .update({
-        title: clean,
-        note: note.trim() || null,
-        is_task: isTask,
-        is_done: isTask ? isDone : false,
-      })
-      .eq("id", item.id)
-      .select("id, list_id, title, note, is_task, is_done, sort_order, created_at, updated_at")
-      .single()
-
-    setSaving(false)
-
-    if (!error && data) {
-      onUpdated(data)
-      setOpen(false)
-    }
-  }
-
-  async function handleDelete() {
-    if (!confirm(`Delete "${item.title}"?`)) return
-    setDeleting(true)
-    const { error } = await supabase.from("holster_list_items").delete().eq("id", item.id)
-    setDeleting(false)
-    if (!error) onDeleted(item.id)
-  }
-
-  return (
-    <div style={{ border: `1px solid ${CONTENT_BDR}`, borderRadius: 8, background: CARD_BG, overflow: "hidden" }}>
-      <button
-        type="button"
-        onClick={() => setOpen(v => !v)}
-        style={{
-          width: "100%",
-          textAlign: "left",
-          border: "none",
-          background: "transparent",
-          padding: "10px 12px",
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          cursor: "pointer",
-          fontFamily: FONT,
-        }}
-      >
-        {item.is_task ? (
-          <input
-            type="checkbox"
-            checked={item.is_done}
-            onChange={e => {
-              e.stopPropagation()
-              void quickDone(e.target.checked)
-            }}
-            onClick={e => e.stopPropagation()}
-          />
-        ) : (
-          <span style={{ width: 10, height: 10, borderRadius: "50%", background: `${TEAL}55`, flexShrink: 0 }} />
-        )}
-
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: TEXT, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {item.title}
-          </div>
-
-          {(item.note || item.is_task) && (
-            <div style={{ marginTop: 2, fontSize: 12, color: DIM, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {item.is_task ? (item.is_done ? "Task · Done" : "Task") : "Notes"}
-              {item.note ? ` · ${item.note}` : ""}
-            </div>
-          )}
-        </div>
-
-        <svg viewBox="0 0 640 640" width={12} height={12} fill={DIM} style={{ flexShrink: 0 }}>
-          {open
-            ? <path d="M320 192L576 448L512 512L320 320L128 512L64 448Z" />
-            : <path d="M320 448L64 192L128 128L320 320L512 128L576 192Z" />}
-        </svg>
-      </button>
-
-      {open && (
-        <div style={{ borderTop: `1px solid ${CONTENT_BDR}`, padding: 12, display: "grid", gap: 8 }}>
-          <input
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-            placeholder="Title"
-            style={inputStyle}
-          />
-
-          <textarea
-            value={note}
-            onChange={e => setNote(e.target.value)}
-            placeholder="Notes"
-            rows={3}
-            style={textareaStyle}
-          />
-
-          <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13, color: MUTED, fontFamily: FONT }}>
-            <input
-              type="checkbox"
-              checked={isTask}
-              onChange={e => {
-                setIsTask(e.target.checked)
-                if (!e.target.checked) setIsDone(false)
-              }}
-            />
-            Is this a task?
-          </label>
-
-          {isTask && (
-            <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13, color: MUTED, fontFamily: FONT }}>
-              <input
-                type="checkbox"
-                checked={isDone}
-                onChange={e => setIsDone(e.target.checked)}
-              />
-              Done
-            </label>
-          )}
-
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              type="button"
-              onClick={() => void handleSave()}
-              disabled={saving}
-              style={{
-                padding: "7px 14px",
-                borderRadius: 6,
-                border: "none",
-                background: TEAL,
-                color: "#fff",
-                fontSize: 12,
-                fontWeight: 700,
-                fontFamily: FONT,
-                cursor: saving ? "not-allowed" : "pointer",
-                opacity: saving ? 0.7 : 1,
-              }}
-            >
-              {saving ? "Saving…" : "Save"}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => void handleDelete()}
-              disabled={deleting}
-              style={{
-                padding: "7px 14px",
-                borderRadius: 6,
-                border: `1px solid ${CONTENT_BDR}`,
-                background: "transparent",
-                color: RED,
-                fontSize: 12,
-                fontWeight: 700,
-                fontFamily: FONT,
-                cursor: deleting ? "not-allowed" : "pointer",
-                opacity: deleting ? 0.7 : 1,
-              }}
-            >
-              {deleting ? "Deleting…" : "Delete"}
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function ListCard({
-  user,
-  row,
-  collections,
-  collectionName,
-  items,
-  open,
-  onToggle,
-  onCollectionCreated,
-  onListUpdated,
-  onListDeleted,
-  onItemAdded,
-  onItemUpdated,
-  onItemDeleted,
-}: {
-  user: User
-  row: HolsterList
-  collections: HolsterCollection[]
-  collectionName: string | null
-  items: HolsterListItem[]
-  open: boolean
-  onToggle: () => void
-  onCollectionCreated: (col: HolsterCollection) => void
-  onListUpdated: (row: HolsterList) => void
-  onListDeleted: (id: string) => void
-  onItemAdded: (row: HolsterListItem) => void
-  onItemUpdated: (row: HolsterListItem) => void
-  onItemDeleted: (id: string) => void
-}) {
-  const [title, setTitle] = useState(row.title)
-  const [description, setDescription] = useState(row.description ?? "")
-  const [collectionId, setCollectionId] = useState<string | null>(row.collection_id)
-  const [saving, setSaving] = useState(false)
-  const [deleting, setDeleting] = useState(false)
-
-  useEffect(() => {
-    setTitle(row.title)
-    setDescription(row.description ?? "")
-    setCollectionId(row.collection_id)
-  }, [row.id, row.title, row.description, row.collection_id])
-
-  async function handleSaveList() {
-    const clean = title.trim()
-    if (!clean) return
-
-    setSaving(true)
-
-    const { data, error } = await supabase
-      .from("holster_lists")
-      .update({
-        title: clean,
-        description: description.trim() || null,
-        collection_id: collectionId,
-      })
-      .eq("id", row.id)
-      .select("id, title, description, collection_id, sort_order, created_at, updated_at")
-      .single()
-
-    setSaving(false)
-
-    if (!error && data) onListUpdated(data)
-  }
-
-  async function handleDeleteList() {
-    if (!confirm(`Delete "${row.title}" and all its items?`)) return
-    setDeleting(true)
-    const { error } = await supabase.from("holster_lists").delete().eq("id", row.id)
-    setDeleting(false)
-    if (!error) onListDeleted(row.id)
-  }
-
-  async function handleAddItem(payload: { title: string; note: string | null; is_task: boolean }) {
-    const nextSort = items.length
-    const { data, error } = await supabase
-      .from("holster_list_items")
-      .insert({
-        user_id: user.id,
-        list_id: row.id,
-        title: payload.title,
-        note: payload.note,
-        is_task: payload.is_task,
-        is_done: false,
-        sort_order: nextSort,
-      })
-      .select("id, list_id, title, note, is_task, is_done, sort_order, created_at, updated_at")
-      .single()
-
-    if (!error && data) onItemAdded(data)
-  }
-
-  return (
-    <div
-      style={{
-        border: `1px solid ${CONTENT_BDR}`,
-        borderRadius: 12,
-        background: CARD_BG,
-        overflow: "hidden",
-        boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
-        alignSelf: "start",
-      }}
-    >
-      <button
-        type="button"
-        onClick={onToggle}
-        style={{
-          width: "100%",
-          border: "none",
-          background: "transparent",
-          textAlign: "left",
-          padding: 14,
-          display: "grid",
-          gap: 8,
-          cursor: "pointer",
-          fontFamily: FONT,
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 800, color: TEXT, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {row.title}
-            </div>
-            <div style={{ marginTop: 3, fontSize: 12, color: DIM }}>
-              {items.length} {items.length === 1 ? "item" : "items"}
-              {collectionName ? ` · ${collectionName}` : " · No collection"}
-            </div>
-          </div>
-
-          <svg viewBox="0 0 640 640" width={12} height={12} fill={DIM} style={{ flexShrink: 0 }}>
-            {open
-              ? <path d="M320 192L576 448L512 512L320 320L128 512L64 448Z" />
-              : <path d="M320 448L64 192L128 128L320 320L512 128L576 192Z" />}
-          </svg>
-        </div>
-
-        {row.description && (
-          <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.5 }}>
-            {row.description}
-          </div>
-        )}
-
-        <div style={{ fontSize: 12, color: DIM }}>
-          Updated {timeAgo(row.updated_at)}
-        </div>
-      </button>
-
-      {open && (
-        <div style={{ borderTop: `1px solid ${CONTENT_BDR}`, padding: 14, display: "grid", gap: 12 }}>
-          <div style={{ display: "grid", gap: 8 }}>
-            <input
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              placeholder="List title"
-              style={inputStyle}
-            />
-
-            <CollectionPicker
-              collections={collections}
-              value={collectionId}
-              onChange={setCollectionId}
-              onCreateNew={onCollectionCreated}
-            />
-
-            <textarea
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              placeholder="Description"
-              rows={3}
-              style={textareaStyle}
-            />
-
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                type="button"
-                onClick={() => void handleSaveList()}
-                disabled={saving}
-                style={{
-                  padding: "8px 14px",
-                  borderRadius: 7,
-                  border: "none",
-                  background: TEAL,
-                  color: "#fff",
-                  fontSize: 12,
-                  fontWeight: 700,
-                  fontFamily: FONT,
-                  cursor: saving ? "not-allowed" : "pointer",
-                  opacity: saving ? 0.7 : 1,
-                }}
-              >
-                {saving ? "Saving…" : "Save list"}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => void handleDeleteList()}
-                disabled={deleting}
-                style={{
-                  padding: "8px 14px",
-                  borderRadius: 7,
-                  border: `1px solid ${CONTENT_BDR}`,
-                  background: "transparent",
-                  color: RED,
-                  fontSize: 12,
-                  fontWeight: 700,
-                  fontFamily: FONT,
-                  cursor: deleting ? "not-allowed" : "pointer",
-                  opacity: deleting ? 0.7 : 1,
-                }}
-              >
-                {deleting ? "Deleting…" : "Delete list"}
-              </button>
-            </div>
-          </div>
-
-          <ItemComposer onAdd={handleAddItem} />
-
-          <div style={{ display: "grid", gap: 8 }}>
-            {items.length === 0 ? (
-              <div style={{ padding: "10px 2px 2px", fontSize: 13, color: DIM, fontFamily: FONT }}>
-                No items yet.
-              </div>
-            ) : (
-              items.map(item => (
-                <ListItemRow
-                  key={item.id}
-                  item={item}
-                  onUpdated={onItemUpdated}
-                  onDeleted={onItemDeleted}
-                />
-              ))
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
 export default function HolsterLists({
   user,
   collections,
@@ -760,30 +241,61 @@ export default function HolsterLists({
   const [lists, setLists] = useState<HolsterList[]>([])
   const [items, setItems] = useState<HolsterListItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [openId, setOpenId] = useState<string | null>(initialOpenListId ?? null)
   const [showAdd, setShowAdd] = useState(false)
   const [search, setSearch] = useState("")
   const [collectionFilter, setCollectionFilter] = useState<CollectionFilter>("all")
   const [sortMode, setSortMode] = useState<"recent" | "az">("recent")
+  const [openListIds, setOpenListIds] = useState<string[]>(
+    initialOpenListId ? [initialOpenListId] : []
+  )
+  const [expandedItemIds, setExpandedItemIds] = useState<string[]>([])
+  const [composerByList, setComposerByList] = useState<Record<string, ComposerState>>({})
+  const [draggingItemId, setDraggingItemId] = useState<string | null>(null)
+  const [dropTarget, setDropTarget] = useState<DropTarget>(null)
 
   useEffect(() => {
     setLoading(true)
 
     Promise.all([
+
       supabase
         .from("holster_lists")
-        .select("id, title, description, collection_id, sort_order, created_at, updated_at")
+        .select(`
+          id,
+          user_id,
+          board_id,
+          title,
+          description,
+          collection_id,
+          sort_order,
+          created_at,
+          updated_at
+        `)
         .eq("user_id", user.id)
         .order("updated_at", { ascending: false }),
+
       supabase
         .from("holster_list_items")
-        .select("id, list_id, title, note, is_task, is_done, sort_order, created_at, updated_at")
+        .select(`
+          id,
+          user_id,
+          list_id,
+          title,
+          note,
+          is_task,
+          is_done,
+          colors,
+          sort_order,
+          created_at,
+          updated_at
+        `)
         .eq("user_id", user.id)
         .order("sort_order", { ascending: true })
         .order("created_at", { ascending: true }),
     ]).then(([listsRes, itemsRes]) => {
       if (listsRes.data) setLists(listsRes.data)
       if (itemsRes.data) setItems(itemsRes.data)
+
       setLoading(false)
     })
   }, [user.id])
@@ -830,17 +342,7 @@ export default function HolsterLists({
   function handleListCreated(row: HolsterList) {
     setLists(prev => [row, ...prev])
     setShowAdd(false)
-    setOpenId(row.id)
-  }
-
-  function handleListUpdated(row: HolsterList) {
-    setLists(prev => prev.map(item => (item.id === row.id ? row : item)))
-  }
-
-  function handleListDeleted(id: string) {
-    setLists(prev => prev.filter(item => item.id !== id))
-    setItems(prev => prev.filter(item => item.list_id !== id))
-    if (openId === id) setOpenId(null)
+    setOpenListIds(prev => [...prev, row.id])
   }
 
   function handleItemAdded(row: HolsterListItem) {
@@ -853,6 +355,198 @@ export default function HolsterLists({
 
   function handleItemDeleted(id: string) {
     setItems(prev => prev.filter(item => item.id !== id))
+  }
+
+  function toggleListOpen(listId: string) {
+    setOpenListIds(prev =>
+      prev.includes(listId)
+        ? prev.filter(id => id !== listId)
+        : [...prev, listId]
+    )
+  }
+
+  function toggleItemExpanded(itemId: string) {
+    setExpandedItemIds(prev =>
+      prev.includes(itemId)
+        ? prev.filter(id => id !== itemId)
+        : [...prev, itemId]
+    )
+  }
+
+  function getComposer(listId: string): ComposerState {
+    return composerByList[listId] ?? {
+      title: "",
+      note: "",
+      notesOpen: false,
+      isTask: false,
+    }
+  }
+
+  function setComposer(listId: string, next: ComposerState) {
+    setComposerByList(prev => ({ ...prev, [listId]: next }))
+  }
+
+  function patchItem(id: string, patch: Partial<HolsterListItem>) {
+    setItems(prev => prev.map(item => item.id === id ? { ...item, ...patch } : item))
+  }
+
+  async function handleQuickDone(item: HolsterListItem, next: boolean) {
+    patchItem(item.id, { is_done: next })
+
+    const { data, error } = await supabase
+      .from("holster_list_items")
+      .update({ is_done: next })
+      .eq("id", item.id)
+      .select(`
+        id,
+        user_id,
+        list_id,
+        title,
+        note,
+        is_task,
+        is_done,
+        colors,
+        sort_order,
+        created_at,
+        updated_at
+      `)
+      .single()
+
+    if (!error && data) handleItemUpdated(data)
+  }
+
+  async function handleSaveItem(item: HolsterListItem) {
+    const clean = item.title.trim()
+    if (!clean) return
+
+    const { data, error } = await supabase
+      .from("holster_list_items")
+      .update({
+        title: clean,
+        note: (item.note ?? "").trim() || null,
+        is_task: item.is_task,
+        is_done: item.is_task ? item.is_done : false,
+      })
+      .eq("id", item.id)
+      .select(`
+        id,
+        user_id,
+        list_id,
+        title,
+        note,
+        is_task,
+        is_done,
+        colors,
+        sort_order,
+        created_at,
+        updated_at
+      `)
+      .single()
+
+    if (!error && data) {
+      handleItemUpdated(data)
+      setExpandedItemIds(prev => prev.filter(id => id !== item.id))
+    }
+  }
+
+  async function handleDeleteItem(item: HolsterListItem) {
+    if (!confirm(`Delete "${item.title}"?`)) return
+
+    const { error } = await supabase
+      .from("holster_list_items")
+      .delete()
+      .eq("id", item.id)
+
+    if (!error) handleItemDeleted(item.id)
+  }
+
+  async function addItemToList(listId: string) {
+    const composer = getComposer(listId)
+    const clean = composer.title.trim()
+    if (!clean) return
+
+    const nextSort = (itemsByList[listId] ?? []).length
+
+    const { data, error } = await supabase
+      .from("holster_list_items")
+      .insert({
+        user_id: user.id,
+        list_id: listId,
+        title: clean,
+        note: composer.note.trim() || null,
+        is_task: composer.isTask,
+        is_done: false,
+        sort_order: nextSort,
+      })
+      .select(`
+        id,
+        user_id,
+        list_id,
+        title,
+        note,
+        is_task,
+        is_done,
+        colors,
+        sort_order,
+        created_at,
+        updated_at
+      `)
+      .single()
+
+    if (!error && data) {
+      handleItemAdded(data)
+      setComposer(listId, { title: "", note: "", notesOpen: false, isTask: false })
+    }
+  }
+
+  async function persistReorder(nextItems: HolsterListItem[]) {
+    setItems(nextItems)
+
+    await Promise.all(
+      nextItems.map(item =>
+        supabase
+          .from("holster_list_items")
+          .update({
+            list_id: item.list_id,
+            sort_order: item.sort_order,
+          })
+          .eq("id", item.id)
+      )
+    )
+  }
+
+  async function moveItem(itemId: string, targetListId: string, targetIndex: number) {
+    const moving = items.find(item => item.id === itemId)
+    if (!moving) return
+
+    const remaining = items.filter(item => item.id !== itemId)
+    const sourceListId = moving.list_id
+
+    const targetListItems = remaining
+      .filter(item => item.list_id === targetListId)
+      .sort((a, b) => a.sort_order - b.sort_order || new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+
+    const clampedIndex = Math.max(0, Math.min(targetIndex, targetListItems.length))
+    const moved: HolsterListItem = { ...moving, list_id: targetListId }
+
+    const nextTarget = [
+      ...targetListItems.slice(0, clampedIndex),
+      moved,
+      ...targetListItems.slice(clampedIndex),
+    ].map((item, idx) => ({ ...item, sort_order: idx }))
+
+    const nextSource = sourceListId === targetListId
+      ? []
+      : remaining
+          .filter(item => item.list_id === sourceListId)
+          .sort((a, b) => a.sort_order - b.sort_order || new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+          .map((item, idx) => ({ ...item, sort_order: idx }))
+
+    const untouched = remaining.filter(
+      item => item.list_id !== sourceListId && item.list_id !== targetListId
+    )
+
+    await persistReorder([...untouched, ...nextTarget, ...nextSource])
   }
 
   return (
@@ -960,33 +654,26 @@ export default function HolsterLists({
             No lists yet.
           </div>
         ) : (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-              gap: 16,
-              alignItems: "start",
-            }}
-          >
-            {filteredLists.map(row => (
-              <ListCard
-                key={row.id}
-                user={user}
-                row={row}
-                collections={collections}
-                collectionName={collections.find(col => col.id === row.collection_id)?.name ?? null}
-                items={itemsByList[row.id] ?? []}
-                open={openId === row.id}
-                onToggle={() => setOpenId(prev => prev === row.id ? null : row.id)}
-                onCollectionCreated={onCollectionCreated}
-                onListUpdated={handleListUpdated}
-                onListDeleted={handleListDeleted}
-                onItemAdded={handleItemAdded}
-                onItemUpdated={handleItemUpdated}
-                onItemDeleted={handleItemDeleted}
-              />
-            ))}
-          </div>
+          <HolsterBoardView
+            lists={filteredLists}
+            itemsByList={itemsByList}
+            openListIds={openListIds}
+            expandedItemIds={expandedItemIds}
+            draggingItemId={draggingItemId}
+            dropTarget={dropTarget}
+            getComposer={getComposer}
+            setComposer={setComposer}
+            toggleListOpen={toggleListOpen}
+            toggleItemExpanded={toggleItemExpanded}
+            addItemToList={addItemToList}
+            moveItem={moveItem}
+            setDraggingItemId={setDraggingItemId}
+            setDropTarget={setDropTarget}
+            patchItem={patchItem}
+            handleQuickDone={handleQuickDone}
+            handleSaveItem={handleSaveItem}
+            handleDeleteItem={handleDeleteItem}
+          />
         )}
       </div>
     </div>

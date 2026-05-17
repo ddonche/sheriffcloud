@@ -8,6 +8,7 @@ import SiteSettingsPanel from "./components/SiteSettingsPanel"
 import { CodexPanel } from "./codex/CodexPanel"
 import { DocsPanel } from "./docs/DocsPanel"
 import LexiconPanel from "./lexicon/LexiconPanel"
+import JournalPanel from "./journal/JournalPanel"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -82,6 +83,7 @@ type NavSelection =
   | { kind: "holster" }
   | { kind: "lexicon" }
   | { kind: "codex" }
+  | { kind: "journal" }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -389,6 +391,7 @@ function Sidebar({ ownedSites, sharedSpurSites, profile, plan, selection, onSele
             {sidebarNavItem("holster", "Holster")}
             {sidebarNavItem("lexicon", "Lexicon")}
             {sidebarNavItem("codex", "Codex")}
+            {sidebarNavItem("journal", "Journal")}
           </div>
 
           <div style={{ borderTop: `1px solid ${SB.border}`, padding: "10px 16px", flexShrink: 0, display: "flex", alignItems: "center", gap: 10 }}>
@@ -708,6 +711,10 @@ export default function App() {
     if (selection.kind === "codex") {
       const defaultSite = ownedSites[0] ?? null
       return defaultSite ? <CodexPanel userId={session.user.id} siteId={defaultSite.id} supabase={supabase} /> : <StubView title="Codex" />
+    }
+
+    if (selection.kind === "journal") {
+      return <JournalPanel userId={session.user.id} supabase={supabase} />
     }
 
     return null
